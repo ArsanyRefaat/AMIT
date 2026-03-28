@@ -10,5 +10,11 @@ public class Project : BaseEntity
     public decimal ProgressPercent { get; set; }
     public DateTime? StartDateUtc { get; set; }
     public DateTime? EndDateUtc { get; set; }
+
+    /// <summary>When true, this project may appear on the public website portfolio (Work).</summary>
+    public bool ShowOnPublicWebsite { get; set; }
+
+    /// <summary>Optional label on the public site (e.g. Branding, Web Design). Max length enforced in API.</summary>
+    public string? WebsiteCategory { get; set; }
 }
 

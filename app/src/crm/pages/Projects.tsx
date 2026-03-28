@@ -263,8 +263,11 @@ export function Projects() {
           name: string;
           description?: string;
           budget: number;
+          progressPercent?: number;
           startDateUtc?: string;
           endDateUtc?: string;
+          showOnPublicWebsite?: boolean;
+          websiteCategory?: string | null;
         }[] = await projRes.json();
 
         let tasksMap: Record<string, ProjectTaskSummary[]> = {};
@@ -300,7 +303,11 @@ export function Projects() {
           const tasksForProject = tasksMap[id] ?? [];
           const totalTasks = tasksForProject.length;
           const completedTasks = tasksForProject.filter((t) => t.status === 'completed').length;
-          const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+          const taskBasedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+          const progress =
+            typeof p.progressPercent === 'number' && p.progressPercent > 0
+              ? Math.round(p.progressPercent)
+              : taskBasedProgress;
 
           return {
             id,
@@ -314,6 +321,8 @@ export function Projects() {
             budget: p.budget,
             actualCost: 0,
             progress,
+            showOnPublicWebsite: p.showOnPublicWebsite ?? false,
+            websiteCategory: p.websiteCategory ?? null,
             teamMembers: [],
             tasks: tasksForProject.map((t) => t.id),
             invoices: [],
@@ -357,6 +366,8 @@ export function Projects() {
       budget: Number(formData.budget || '0'),
       startDateUtc: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
       endDateUtc: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
+      showOnPublicWebsite: false,
+      websiteCategory: null as string | null,
     };
 
     const res = await fetch(`${API_BASE}/api/projects`, {
@@ -366,7 +377,19 @@ export function Projects() {
     });
 
     if (!res.ok) return;
-    const created: { id: number; customerId: number; customerName: string; name: string; description?: string; budget: number; progressPercent: number; startDateUtc?: string; endDateUtc?: string } = await res.json();
+    const created: {
+      id: number;
+      customerId: number;
+      customerName: string;
+      name: string;
+      description?: string;
+      budget: number;
+      progressPercent: number;
+      startDateUtc?: string;
+      endDateUtc?: string;
+      showOnPublicWebsite?: boolean;
+      websiteCategory?: string | null;
+    } = await res.json();
 
     const newProject: Project = {
       id: String(created.id),
@@ -381,6 +404,8 @@ export function Projects() {
       budget: created.budget,
       actualCost: 0,
       progress: Number(created.progressPercent ?? 0),
+      showOnPublicWebsite: created.showOnPublicWebsite ?? false,
+      websiteCategory: created.websiteCategory ?? null,
       teamMembers: [],
       tasks: [],
       invoices: [],
@@ -406,6 +431,8 @@ export function Projects() {
         budget: Number(formData.budget || '0'),
         startDateUtc: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
         endDateUtc: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
+        showOnPublicWebsite: selectedProject.showOnPublicWebsite ?? false,
+        websiteCategory: selectedProject.websiteCategory ?? null,
       };
 
       const res = await fetch(`${API_BASE}/api/projects/${selectedProject.id}`, {
@@ -427,7 +454,19 @@ export function Projects() {
         return;
       }
 
-      const updated: { id: number; customerId: number; customerName: string; name: string; description?: string; budget: number; progressPercent?: number; startDateUtc?: string; endDateUtc?: string } = JSON.parse(text);
+      const updated: {
+        id: number;
+        customerId: number;
+        customerName: string;
+        name: string;
+        description?: string;
+        budget: number;
+        progressPercent?: number;
+        startDateUtc?: string;
+        endDateUtc?: string;
+        showOnPublicWebsite?: boolean;
+        websiteCategory?: string | null;
+      } = JSON.parse(text);
 
       setProjects((prev) => prev.map((project) =>
         project.id === selectedProject.id
@@ -443,6 +482,8 @@ export function Projects() {
               endDate: updated.endDateUtc,
               budget: updated.budget,
               progress: Number(updated.progressPercent ?? project.progress ?? 0),
+              showOnPublicWebsite: updated.showOnPublicWebsite ?? project.showOnPublicWebsite,
+              websiteCategory: updated.websiteCategory ?? project.websiteCategory,
               updatedAt: new Date().toISOString(),
             }
           : project

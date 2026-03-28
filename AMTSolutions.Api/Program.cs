@@ -813,6 +813,25 @@ app.MapDelete("/api/projects/{id:int}", async (int id, IProjectService service, 
     return deleted ? Results.NoContent() : Results.NotFound();
 });
 
+app.MapPatch("/api/projects/{id:int}/website", async (int id, PatchProjectWebsiteRequest request, IProjectService service, CancellationToken ct) =>
+{
+    var updated = await service.PatchWebsiteAsync(id, request, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+});
+
+// Public portfolio (no auth; used by marketing site)
+app.MapGet("/api/public/portfolio", async (IProjectService service, CancellationToken ct) =>
+{
+    var list = await service.GetPublicPortfolioAsync(ct);
+    return Results.Ok(list);
+});
+
+app.MapGet("/api/public/portfolio/{slug}", async (string slug, IProjectService service, CancellationToken ct) =>
+{
+    var detail = await service.GetPublicPortfolioBySlugAsync(slug, ct);
+    return detail is null ? Results.NotFound() : Results.Ok(detail);
+});
+
 // Invoices
 app.MapGet("/api/invoices", async (IInvoiceService service, CancellationToken ct) =>
 {

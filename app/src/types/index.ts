@@ -248,6 +248,10 @@ export interface Project {
   progress: number;
   createdAt: string;
   updatedAt: string;
+  /** When true, project can appear on the public Work / portfolio pages */
+  showOnPublicWebsite?: boolean;
+  /** Label on the public site (e.g. Branding). Optional. */
+  websiteCategory?: string | null;
 }
 
 export interface Deliverable {

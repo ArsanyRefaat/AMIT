@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ExternalLink } from 'lucide-react';
 import { portfolioItems } from '@/data/mockData';
+import type { PortfolioItem } from '@/types';
+import { API_BASE } from '@/lib/api';
 
 type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-study';
 
@@ -10,13 +12,63 @@ interface PortfolioProps {
   fullPage?: boolean;
 }
 
+type PublicPortfolioApi = {
+  id: number;
+  slug: string;
+  title: string;
+  category: string;
+  clientName: string;
+  shortDescription: string;
+  results: { metric: string; value: string }[];
+};
+
+function mapApiToPortfolioItem(x: PublicPortfolioApi): PortfolioItem {
+  return {
+    id: `crm-${x.id}`,
+    slug: x.slug,
+    title: x.title,
+    category: x.category,
+    client: x.clientName,
+    shortDescription: x.shortDescription,
+    problem: '',
+    solution: '',
+    deliverables: [],
+    results: x.results.map((r) => ({ metric: r.metric, value: r.value })),
+    images: [],
+    featuredImage: '',
+    date: new Date().toISOString().slice(0, 10),
+    isFeatured: true,
+    isActive: true,
+  };
+}
+
 export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
   const [activeFilter, setActiveFilter] = useState('All');
+  const [apiItems, setApiItems] = useState<PortfolioItem[] | null>(null);
 
-  const categories = ['All', ...Array.from(new Set(portfolioItems.map((item) => item.category)))];
-  const featuredItems = portfolioItems.filter((item) => item.isFeatured);
-  const displayedItems = fullPage 
-    ? (activeFilter === 'All' ? portfolioItems : portfolioItems.filter((item) => item.category === activeFilter))
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/public/portfolio`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: PublicPortfolioApi[]) => {
+        if (cancelled || !Array.isArray(data) || data.length === 0) return;
+        setApiItems(data.map(mapApiToPortfolioItem));
+      })
+      .catch(() => {
+        /* keep mock fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sourceItems = apiItems ?? portfolioItems;
+  const categories = ['All', ...Array.from(new Set(sourceItems.map((item) => item.category)))];
+  const featuredItems = sourceItems.filter((item) => item.isFeatured);
+  const displayedItems = fullPage
+    ? activeFilter === 'All'
+      ? sourceItems
+      : sourceItems.filter((item) => item.category === activeFilter)
     : featuredItems;
 
   return (
@@ -90,7 +142,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
                         {item.category}
                       </span>
                     </div>
-                    
+
                     {/* Hover Overlay */}
                     <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-black text-sm font-medium rounded-full flex items-center gap-2 hover:bg-[#C9A962] transition-colors">
@@ -139,7 +191,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
             transition={{ duration: 0.5, delay: 0.4 }}
             className="text-center mt-10 md:mt-12"
           >
-            <button 
+            <button
               onClick={() => onNavigate('portfolio')}
               className="inline-flex items-center gap-2 px-6 py-3 border border-gray-200 rounded-full text-sm font-medium text-black hover:bg-gray-50 transition-colors"
             >

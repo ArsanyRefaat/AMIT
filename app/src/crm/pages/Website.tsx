@@ -43,6 +43,14 @@ type WebsiteTestimonial = {
   isActive: boolean;
 };
 
+type CrmProjectForWebsite = {
+  id: number;
+  name: string;
+  customerName: string;
+  showOnPublicWebsite: boolean;
+  websiteCategory: string | null;
+};
+
 export function Website() {
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,6 +68,66 @@ export function Website() {
   });
   const [services, setServices] = useState<WebsiteService[]>([]);
   const [testimonials, setTestimonials] = useState<WebsiteTestimonial[]>([]);
+  const [crmProjects, setCrmProjects] = useState<CrmProjectForWebsite[]>([]);
+  const [crmProjectsLoading, setCrmProjectsLoading] = useState(false);
+  const [togglingProjectId, setTogglingProjectId] = useState<number | null>(null);
+
+  const loadCrmProjects = async () => {
+    setCrmProjectsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/projects`);
+      if (!res.ok) throw new Error('Failed to load projects');
+      const data: {
+        id: number;
+        name: string;
+        customerName: string;
+        showOnPublicWebsite?: boolean;
+        websiteCategory?: string | null;
+      }[] = await res.json();
+      setCrmProjects(
+        data.map((p) => ({
+          id: p.id,
+          name: p.name,
+          customerName: p.customerName,
+          showOnPublicWebsite: p.showOnPublicWebsite ?? false,
+          websiteCategory: p.websiteCategory ?? null,
+        })),
+      );
+    } catch {
+      toast.error('Could not load CRM projects.');
+    } finally {
+      setCrmProjectsLoading(false);
+    }
+  };
+
+  const patchProjectWebsite = async (
+    id: number,
+    patch: { showOnPublicWebsite?: boolean; websiteCategory?: string | null },
+  ) => {
+    const res = await fetch(`${API_BASE}/api/projects/${id}/website`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      toast.error('Could not update project.');
+      return false;
+    }
+    const updated: { showOnPublicWebsite?: boolean; websiteCategory?: string | null } = await res.json();
+    setCrmProjects((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              showOnPublicWebsite: updated.showOnPublicWebsite ?? p.showOnPublicWebsite,
+              websiteCategory:
+                updated.websiteCategory !== undefined ? updated.websiteCategory ?? null : p.websiteCategory,
+            }
+          : p,
+      ),
+    );
+    return true;
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -114,6 +182,10 @@ export function Website() {
     };
 
     load();
+  }, []);
+
+  useEffect(() => {
+    void loadCrmProjects();
   }, []);
 
   const handleSave = () => {
@@ -512,12 +584,71 @@ export function Website() {
           <TabsContent value="portfolio" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="font-heading text-lg">Portfolio Projects</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-[var(--amd-gray-600)]">
-                  Portfolio projects are managed through the Projects section. Mark projects as featured to display them on the homepage.
+                <CardTitle className="font-heading text-lg">Portfolio on public website</CardTitle>
+                <p className="text-sm text-[var(--amd-gray-500)] mt-1">
+                  Choose which CRM projects appear on the main site under <strong>Work</strong>. Use the eye to show or hide. Set a short category label (e.g. Branding) for the gold tag on the card.
                 </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {crmProjectsLoading ? (
+                  <p className="text-sm text-[var(--amd-gray-500)]">Loading projects…</p>
+                ) : crmProjects.length === 0 ? (
+                  <p className="text-[var(--amd-gray-600)]">
+                    No projects yet. Add them in <strong>Projects</strong>, then return here to publish to the website.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {crmProjects.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--amd-gray-100)] p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-[var(--amd-black)] truncate">{p.name}</p>
+                          <p className="text-xs text-[var(--amd-gray-500)]">{p.customerName}</p>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto sm:max-w-[200px]">
+                          <Input
+                            placeholder="Category (e.g. Branding)"
+                            className="h-9 text-sm"
+                            defaultValue={p.websiteCategory ?? ''}
+                            key={`${p.id}-${p.websiteCategory ?? ''}`}
+                            onBlur={async (e) => {
+                              const next = e.target.value.trim() || null;
+                              const prev = p.websiteCategory ?? null;
+                              if (next === prev) return;
+                              const ok = await patchProjectWebsite(p.id, { websiteCategory: next });
+                              if (ok) toast.success('Category updated');
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          disabled={togglingProjectId === p.id}
+                          title={p.showOnPublicWebsite ? 'Visible on website — click to hide' : 'Hidden — click to show on website'}
+                          onClick={async () => {
+                            setTogglingProjectId(p.id);
+                            const next = !p.showOnPublicWebsite;
+                            const ok = await patchProjectWebsite(p.id, { showOnPublicWebsite: next });
+                            setTogglingProjectId(null);
+                            if (ok) {
+                              toast.success(next ? 'Shown on public website' : 'Hidden from public website');
+                            }
+                          }}
+                        >
+                          {p.showOnPublicWebsite ? (
+                            <Eye className="h-4 w-4 text-[var(--amd-black)]" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-[var(--amd-gray-400)]" />
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
