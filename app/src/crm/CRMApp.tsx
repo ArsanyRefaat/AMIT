@@ -18,9 +18,10 @@ type AppView = 'entry' | 'website' | 'crm';
 
 interface CRMAppProps {
   onNavigate: (view: AppView) => void;
+  onLogout: () => void;
 }
 
-export function CRMApp({ onNavigate }: CRMAppProps) {
+export function CRMApp({ onNavigate, onLogout }: CRMAppProps) {
   const [currentPage, setCurrentPage] = useState<CRMPage>('dashboard');
   const [createInvoiceForCustomerId, setCreateInvoiceForCustomerId] = useState<string | null>(null);
 
@@ -29,6 +30,7 @@ export function CRMApp({ onNavigate }: CRMAppProps) {
       currentPage={currentPage}
       onNavigate={setCurrentPage}
       onBackToEntry={() => onNavigate('website')}
+      onLogout={onLogout}
     >
       {currentPage === 'dashboard' && <Dashboard onNavigate={setCurrentPage} />}
       {currentPage === 'leads' && <Leads />}

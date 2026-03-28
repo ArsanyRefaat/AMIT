@@ -19,9 +19,10 @@ type CRMPage = 'dashboard' | 'leads' | 'customers' | 'products' | 'projects' | '
 
 interface CRMAppProps {
   onNavigate: (view: AppView) => void;
+  onLogout: () => void;
 }
 
-function CRMApp({ onNavigate }: CRMAppProps) {
+function CRMApp({ onNavigate, onLogout }: CRMAppProps) {
   const [currentPage, setCurrentPage] = useState<CRMPage>('dashboard');
 
   const handleNavigate = (page: CRMPage) => {
@@ -60,10 +61,11 @@ function CRMApp({ onNavigate }: CRMAppProps) {
   };
 
   return (
-    <CRMLayout 
-      currentPage={currentPage} 
+    <CRMLayout
+      currentPage={currentPage}
       onNavigate={handleNavigate}
       onBackToEntry={() => onNavigate('website')}
+      onLogout={onLogout}
     >
       {renderPage()}
       <Toaster position="bottom-right" />

@@ -19,6 +19,7 @@ import {
   X,
   ArrowLeft,
   Shield,
+  LogOut,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -38,6 +39,7 @@ interface CRMLayoutProps {
   currentPage: CRMPage;
   onNavigate: (page: CRMPage) => void;
   onBackToEntry: () => void;
+  onLogout: () => void;
 }
 
 const NAV_ITEMS_BASE: { id: CRMPage; label: string; icon: typeof LayoutDashboard; showBadge?: 'leads' | 'tasks' }[] = [
@@ -73,7 +75,7 @@ const PAGE_VIEW_PERMISSION: Partial<Record<CRMPage, string>> = {
   settings: 'settings_view',
 };
 
-export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry }: CRMLayoutProps) {
+export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, onLogout }: CRMLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [leadsCount, setLeadsCount] = useState<number>(0);
@@ -538,6 +540,14 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry }: 
                 <DropdownMenuItem onClick={onBackToEntry} className="text-gray-600">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   View website
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={onLogout}
+                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

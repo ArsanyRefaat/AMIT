@@ -6,6 +6,7 @@ import { CRMApp } from '@/crm/CRMApp';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { API_BASE } from '@/lib/api';
+import { clearStoredAuth } from '@/lib/authSession';
 
 type AppView = 'entry' | 'website' | 'crm' | 'login' | 'loading';
 const AUTH_TOKEN_KEY = 'authToken';
@@ -14,14 +15,6 @@ const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const markSessionActivity = () => {
   localStorage.setItem(AUTH_LAST_ACTIVITY_KEY, String(Date.now()));
-};
-
-const clearStoredAuth = () => {
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('authEmail');
-  localStorage.removeItem('authUserId');
-  localStorage.removeItem('authRoles');
-  localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
 };
 
 const hasActiveSession = () => {
@@ -154,12 +147,18 @@ function App() {
     markSessionActivity();
   };
 
+  const handleLogout = () => {
+    clearStoredAuth();
+    setCurrentView('login');
+    window.history.pushState({}, '', '/login');
+  };
+
   return (
     <>
       {currentView === 'entry' && <EntryPage onNavigate={handleNavigate} />}
       {currentView === 'login' && <LoginPage onNavigate={handleNavigate} onLogin={handleLogin} />}
       {currentView === 'website' && <WebsiteApp />}
-      {currentView === 'crm' && <CRMApp onNavigate={handleNavigate} />}
+      {currentView === 'crm' && <CRMApp onNavigate={handleNavigate} onLogout={handleLogout} />}
       {currentView === 'loading' && <div className="min-h-screen bg-white" />}
       <Toaster position="bottom-right" />
     </>
