@@ -6,7 +6,6 @@ type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-stud
 
 interface FooterProps {
   onNavigate: (page: Page) => void;
-  onBackToEntry: () => void;
 }
 
 type CompanySettings = {
@@ -17,7 +16,7 @@ type CompanySettings = {
   country: string;
 };
 
-export function Footer({ onNavigate, onBackToEntry }: FooterProps) {
+export function Footer({ onNavigate }: FooterProps) {
   const currentYear = new Date().getFullYear();
 
   const [company, setCompany] = useState<CompanySettings | null>(null);
@@ -196,12 +195,6 @@ export function Footer({ onNavigate, onBackToEntry }: FooterProps) {
               </button>
               <button className="text-gray-500 hover:text-white transition-colors text-xs">
                 Terms of Service
-              </button>
-              <button 
-                onClick={onBackToEntry}
-                className="text-[#C9A962] hover:text-white transition-colors text-xs"
-              >
-                System Portal
               </button>
             </div>
           </div>

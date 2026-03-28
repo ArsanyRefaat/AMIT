@@ -84,6 +84,12 @@ function App() {
       return;
     }
 
+    // Secret Business Development portal (not linked from public site)
+    if (path === '/entry') {
+      setCurrentView('entry');
+      return;
+    }
+
     if (path === '/crm' || path === '/admin' || path === '/dashboard') {
       if (!hasActiveSession()) {
         setCurrentView('login');
@@ -152,7 +158,7 @@ function App() {
     <>
       {currentView === 'entry' && <EntryPage onNavigate={handleNavigate} />}
       {currentView === 'login' && <LoginPage onNavigate={handleNavigate} onLogin={handleLogin} />}
-      {currentView === 'website' && <WebsiteApp onNavigate={handleNavigate} />}
+      {currentView === 'website' && <WebsiteApp />}
       {currentView === 'crm' && <CRMApp onNavigate={handleNavigate} />}
       {currentView === 'loading' && <div className="min-h-screen bg-white" />}
       <Toaster position="bottom-right" />

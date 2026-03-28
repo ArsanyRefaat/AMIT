@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ExternalLink } from 'lucide-react';
 import { portfolioItems } from '@/data/mockData';
 import type { PortfolioItem } from '@/types';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, resolvePortfolioImageUrl } from '@/lib/api';
 
 type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-study';
 
@@ -24,7 +24,7 @@ type PublicPortfolioApi = {
 };
 
 function mapApiToPortfolioItem(x: PublicPortfolioApi): PortfolioItem {
-  const url = x.imageUrl?.trim() ?? '';
+  const url = resolvePortfolioImageUrl(x.imageUrl) ?? '';
   return {
     id: `crm-${x.id}`,
     slug: x.slug,
@@ -44,27 +44,50 @@ function mapApiToPortfolioItem(x: PublicPortfolioApi): PortfolioItem {
   };
 }
 
+type PortfolioLoadState =
+  | { status: 'loading' }
+  | { status: 'crm'; items: PortfolioItem[] }
+  | { status: 'fallback' };
+
 export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
   const [activeFilter, setActiveFilter] = useState('All');
-  const [apiItems, setApiItems] = useState<PortfolioItem[] | null>(null);
+  const [loadState, setLoadState] = useState<PortfolioLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetch(`${API_BASE}/api/public/portfolio`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : []))
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Portfolio request failed');
+        return r.json() as Promise<PublicPortfolioApi[]>;
+      })
       .then((data: PublicPortfolioApi[]) => {
-        if (cancelled || !Array.isArray(data) || data.length === 0) return;
-        setApiItems(data.map(mapApiToPortfolioItem));
+        if (cancelled) return;
+        if (!Array.isArray(data)) {
+          setLoadState({ status: 'crm', items: [] });
+          return;
+        }
+        if (data.length === 0) {
+          setLoadState({ status: 'crm', items: [] });
+          return;
+        }
+        setLoadState({ status: 'crm', items: data.map(mapApiToPortfolioItem) });
       })
       .catch(() => {
-        /* keep mock fallback */
+        if (!cancelled) {
+          setLoadState({ status: 'fallback' });
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const sourceItems = apiItems ?? portfolioItems;
+  const sourceItems =
+    loadState.status === 'loading'
+      ? []
+      : loadState.status === 'crm'
+        ? loadState.items
+        : portfolioItems;
   const categories = ['All', ...Array.from(new Set(sourceItems.map((item) => item.category)))];
   const featuredItems = sourceItems.filter((item) => item.isFeatured);
   const displayedItems = fullPage
@@ -72,6 +95,9 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
       ? sourceItems
       : sourceItems.filter((item) => item.category === activeFilter)
     : featuredItems;
+
+  const isLoading = loadState.status === 'loading';
+  const skeletonCount = fullPage ? 6 : 3;
 
   return (
     <section className={`${fullPage ? 'pt-24 md:pt-32 pb-16' : 'py-16 md:py-24'} bg-gray-50`}>
@@ -95,8 +121,8 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
           </p>
         </motion.div>
 
-        {/* Filter Tabs (Full Page Only) */}
-        {fullPage && (
+        {/* Filter Tabs (Full Page Only) — hide until CRM data or fallback is ready */}
+        {fullPage && !isLoading && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -122,8 +148,32 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
 
         {/* Portfolio Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          {isLoading && (
+            <>
+              {Array.from({ length: skeletonCount }).map((_, i) => (
+                <div
+                  key={`sk-${i}`}
+                  className="rounded-2xl bg-white shadow-sm overflow-hidden border border-gray-100 animate-pulse"
+                >
+                  <div className="aspect-[4/3] bg-gray-200" />
+                  <div className="p-5 md:p-6 space-y-3">
+                    <div className="h-3 bg-gray-200 rounded w-24" />
+                    <div className="h-5 bg-gray-200 rounded w-3/4" />
+                    <div className="h-4 bg-gray-100 rounded w-full" />
+                    <div className="h-4 bg-gray-100 rounded w-5/6" />
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          {!isLoading && loadState.status === 'crm' && sourceItems.length === 0 && (
+            <div className="col-span-full text-center py-16 text-gray-500 text-sm md:text-base">
+              No projects are published on the website yet. Check back soon.
+            </div>
+          )}
           <AnimatePresence mode="wait">
-            {displayedItems.map((item, index) => (
+            {!isLoading &&
+              displayedItems.map((item, index) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -141,8 +191,9 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
                         src={item.featuredImage.trim()}
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover"
-                        loading="lazy"
+                        loading="eager"
                         decoding="async"
+                        referrerPolicy="no-referrer"
                       />
                     ) : null}
                     <div
@@ -198,7 +249,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
         </div>
 
         {/* Bottom CTA */}
-        {!fullPage && (
+        {!fullPage && !isLoading && sourceItems.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}

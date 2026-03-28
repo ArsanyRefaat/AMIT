@@ -3,7 +3,7 @@ import { ArrowLeft, CheckCircle2, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { portfolioItems } from '@/data/mockData';
 import type { PortfolioItem } from '@/types';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, resolvePortfolioImageUrl } from '@/lib/api';
 
 type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-study';
 
@@ -36,7 +36,7 @@ function toViewFromMock(cs: PortfolioItem) {
     problem: cs.problem,
     solution: cs.solution,
     deliverables: cs.deliverables,
-    heroImageUrl: cs.featuredImage?.trim() || undefined,
+    heroImageUrl: resolvePortfolioImageUrl(cs.featuredImage) ?? undefined,
   };
 }
 
@@ -67,7 +67,7 @@ function toViewFromApi(d: ApiPortfolioDetail) {
     problem,
     solution: solutionText,
     deliverables: deliverables.length > 0 ? deliverables : [d.shortDescription],
-    heroImageUrl: d.imageUrl?.trim() || undefined,
+    heroImageUrl: resolvePortfolioImageUrl(d.imageUrl) ?? undefined,
   };
 }
 
@@ -190,6 +190,7 @@ export function CaseStudy({ slug, onNavigate }: CaseStudyProps) {
               className="w-full max-h-[min(70vh,520px)] rounded-xl object-cover shadow-sm"
               loading="eager"
               decoding="async"
+              referrerPolicy="no-referrer"
             />
           </div>
         </section>

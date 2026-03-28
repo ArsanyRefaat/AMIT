@@ -303,9 +303,9 @@ export function LoginPage({ onNavigate, onLogin }: LoginPageProps) {
           <button
             type="button"
             className="w-full text-xs text-[#999] underline mt-2"
-            onClick={() => onNavigate('entry')}
+            onClick={() => onNavigate('website')}
           >
-            Back to start page
+            Back to website
           </button>
         </motion.form>
       </div>

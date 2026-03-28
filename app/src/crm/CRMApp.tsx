@@ -28,7 +28,7 @@ export function CRMApp({ onNavigate }: CRMAppProps) {
     <CRMLayout
       currentPage={currentPage}
       onNavigate={setCurrentPage}
-      onBackToEntry={() => onNavigate('entry')}
+      onBackToEntry={() => onNavigate('website')}
     >
       {currentPage === 'dashboard' && <Dashboard onNavigate={setCurrentPage} />}
       {currentPage === 'leads' && <Leads />}

@@ -12,7 +12,6 @@ import { Contact } from './sections/Contact';
 import { CaseStudy } from './sections/CaseStudy';
 import { API_BASE } from '@/lib/api';
 
-type AppView = 'entry' | 'website' | 'crm';
 type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-study';
 
 type WebsiteSettings = {
@@ -25,11 +24,7 @@ type WebsiteSettings = {
   statsClientSatisfaction: string;
 };
 
-interface WebsiteAppProps {
-  onNavigate: (view: AppView) => void;
-}
-
-export function WebsiteApp({ onNavigate }: WebsiteAppProps) {
+export function WebsiteApp() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedCaseStudy, setSelectedCaseStudy] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -132,12 +127,11 @@ export function WebsiteApp({ onNavigate }: WebsiteAppProps) {
       <Header 
         currentPage={currentPage} 
         onNavigate={handleNavigate} 
-        onBackToEntry={() => onNavigate('entry')}
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
       />
       <main className="pt-16 md:pt-20">{renderPage()}</main>
-      <Footer onNavigate={handleNavigate} onBackToEntry={() => onNavigate('entry')} />
+      <Footer onNavigate={handleNavigate} />
     </div>
   );
 }

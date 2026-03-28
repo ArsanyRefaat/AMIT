@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ArrowLeft } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '@/lib/api';
 
@@ -8,12 +8,11 @@ type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-stud
 interface HeaderProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
-  onBackToEntry: () => void;
   isMenuOpen: boolean;
   setIsMenuOpen: (open: boolean) => void;
 }
 
-export function Header({ currentPage, onNavigate, onBackToEntry, isMenuOpen, setIsMenuOpen }: HeaderProps) {
+export function Header({ currentPage, onNavigate, isMenuOpen, setIsMenuOpen }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [logoUrl, setLogoUrl] = useState('/images/amt-logo.png');
 
@@ -60,14 +59,6 @@ export function Header({ currentPage, onNavigate, onBackToEntry, isMenuOpen, set
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            {/* Back Button (Mobile) */}
-            <button
-              onClick={onBackToEntry}
-              className="md:hidden p-2 -ml-2 rounded-lg hover:bg-black/5 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-
             {/* Logo */}
             <button
               onClick={() => onNavigate('home')}

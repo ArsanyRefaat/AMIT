@@ -63,7 +63,7 @@ function CRMApp({ onNavigate }: CRMAppProps) {
     <CRMLayout 
       currentPage={currentPage} 
       onNavigate={handleNavigate}
-      onBackToEntry={() => onNavigate('entry')}
+      onBackToEntry={() => onNavigate('website')}
     >
       {renderPage()}
       <Toaster position="bottom-right" />
