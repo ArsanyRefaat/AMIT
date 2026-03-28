@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+.vscode/
+app/node_modules/
+app/dist/
+Dockerfile.frontend
+docker-compose.yml
+*.user
+*.suo
