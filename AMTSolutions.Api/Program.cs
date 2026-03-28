@@ -28,9 +28,20 @@ using Twilio.Types;
 using System.Net;
 using System.Net.Mail;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// So Request.Scheme/Host match the public URL when behind Render, nginx, Cloudflare, etc.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+        | ForwardedHeaders.XForwardedProto
+        | ForwardedHeaders.XForwardedHost;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddOpenApi();
 
@@ -559,6 +570,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Must run early so UseStaticFiles, auth, and minimal APIs see the real public scheme/host.
+app.UseForwardedHeaders();
+
 // In development we serve HTTP only to avoid HTTPS redirect / dev-certificate issues with fetch.
 app.UseCors();
 app.UseStaticFiles(new StaticFileOptions
@@ -829,7 +843,8 @@ app.MapPatch("/api/projects/{id:int}/website", async (int id, PatchProjectWebsit
 });
 
 // Portfolio image upload (saves under wwwroot/uploads/portfolio; requires sign-in).
-// Set PublicBaseUrl in appsettings or PUBLIC_BASE_URL when the API is behind a reverse proxy so image URLs are correct.
+// Set PUBLIC_BASE_URL (e.g. https://your-api.onrender.com) on cloud hosts so stored URLs work from every device.
+// Without it, URLs may use localhost or HTTP and images fail on phones / other networks.
 app.MapPost("/api/projects/{id:int}/portfolio-image", async (
     int id,
     IFormFile file,
@@ -879,9 +894,17 @@ app.MapPost("/api/projects/{id:int}/portfolio-image", async (
         configured = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL")?.Trim().TrimEnd('/');
     }
 
+    // Prefer explicit public URL; else use forwarded-aware request (HTTPS + public host on Render).
     var baseUrl = !string.IsNullOrEmpty(configured)
         ? configured
         : $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
+
+    if (baseUrl.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+        || baseUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+    {
+        Console.WriteLine(
+            "[portfolio-image] Warning: image URL uses localhost. Set PUBLIC_BASE_URL to your public API URL so images load on all devices.");
+    }
 
     var publicUrl = $"{baseUrl}/uploads/portfolio/{safeName}";
 

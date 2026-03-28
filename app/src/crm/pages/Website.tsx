@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Layout, FileText, Image, MessageSquare, Settings, ExternalLink, Save, Plus, Eye, EyeOff, ArrowUp, ArrowDown, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -687,7 +688,7 @@ export function Website() {
               <CardHeader>
                 <CardTitle className="font-heading text-lg">Portfolio on public website</CardTitle>
                 <p className="text-sm text-[var(--amd-gray-500)] mt-1">
-                  Choose which CRM projects appear on the main site under <strong>Work</strong>. Use the eye to show or hide. Set a category and a portfolio image — paste a URL or upload a file (stored on the server).
+                  Choose which CRM projects appear on the main site under <strong>Work</strong>. Use the eye to show or hide. Set category, image, and optional <strong>The Challenge</strong> / <strong>Our Solution</strong> text for the case study page.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -709,104 +710,120 @@ export function Website() {
                     {crmProjects.map((p) => (
                       <div
                         key={p.id}
-                        className="flex flex-col gap-3 rounded-lg border border-[var(--amd-gray-100)] p-3 sm:flex-row sm:flex-wrap sm:items-center"
+                        className="rounded-lg border border-[var(--amd-gray-100)] p-3 space-y-3"
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-[var(--amd-black)] truncate">{p.name}</p>
-                          <p className="text-xs text-[var(--amd-gray-500)]">{p.customerName}</p>
-                        </div>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px] sm:max-w-md sm:flex-1">
-                          <Input
-                            placeholder="Category (e.g. Branding)"
-                            className="h-9 text-sm"
-                            defaultValue={p.websiteCategory ?? ''}
-                            key={`cat-${p.id}-${p.websiteCategory ?? ''}`}
-                            onBlur={async (e) => {
-                              const next = e.target.value.trim() || null;
-                              const prev = p.websiteCategory ?? null;
-                              if (next === prev) return;
-                              const ok = await patchProjectWebsite(p.id, { websiteCategory: next });
-                              if (ok) toast.success('Category updated');
-                            }}
-                          />
-                          <div className="flex gap-2 items-center">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-[var(--amd-black)] truncate">{p.name}</p>
+                            <p className="text-xs text-[var(--amd-gray-500)]">{p.customerName}</p>
+                          </div>
+                          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px] sm:max-w-lg sm:flex-1">
                             <Input
-                              placeholder="Portfolio image URL (https://…)"
-                              className="h-9 text-sm flex-1 min-w-0"
-                              type="url"
-                              inputMode="url"
-                              defaultValue={p.publicPortfolioImageUrl ?? ''}
-                              key={`img-${p.id}-${p.publicPortfolioImageUrl ?? ''}`}
+                              placeholder="Category (e.g. Branding)"
+                              className="h-9 text-sm"
+                              defaultValue={p.websiteCategory ?? ''}
+                              key={`cat-${p.id}-${p.websiteCategory ?? ''}`}
                               onBlur={async (e) => {
                                 const next = e.target.value.trim() || null;
-                                const prev = p.publicPortfolioImageUrl ?? null;
+                                const prev = p.websiteCategory ?? null;
                                 if (next === prev) return;
-                                const ok = await patchProjectWebsite(p.id, { publicPortfolioImageUrl: next });
-                                if (ok) toast.success('Portfolio image URL updated');
+                                const ok = await patchProjectWebsite(p.id, { websiteCategory: next });
+                                if (ok) toast.success('Category updated');
                               }}
                             />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9 shrink-0"
-                              disabled={uploadingPortfolioId === p.id}
-                              title="Upload image from device"
-                              onClick={() => startPortfolioImageUpload(p.id)}
-                            >
-                              <Upload className="h-4 w-4" />
-                            </Button>
+                            <div className="flex gap-2 items-center">
+                              <Input
+                                placeholder="Portfolio image URL (https://…)"
+                                className="h-9 text-sm flex-1 min-w-0"
+                                type="url"
+                                inputMode="url"
+                                defaultValue={p.publicPortfolioImageUrl ?? ''}
+                                key={`img-${p.id}-${p.publicPortfolioImageUrl ?? ''}`}
+                                onBlur={async (e) => {
+                                  const next = e.target.value.trim() || null;
+                                  const prev = p.publicPortfolioImageUrl ?? null;
+                                  if (next === prev) return;
+                                  const ok = await patchProjectWebsite(p.id, { publicPortfolioImageUrl: next });
+                                  if (ok) toast.success('Portfolio image URL updated');
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-9 w-9 shrink-0"
+                                disabled={uploadingPortfolioId === p.id}
+                                title="Upload image from device"
+                                onClick={() => startPortfolioImageUpload(p.id)}
+                              >
+                                <Upload className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                          <Textarea
-                            placeholder="The Challenge (public case study)"
-                            className="min-h-[72px] text-sm resize-y"
-                            defaultValue={p.publicPortfolioChallenge ?? ''}
-                            key={`ch-${p.id}-${p.publicPortfolioChallenge ?? ''}`}
-                            onBlur={async (e) => {
-                              const next = e.target.value.trim() || null;
-                              const prev = p.publicPortfolioChallenge ?? null;
-                              if (next === prev) return;
-                              const ok = await patchProjectWebsite(p.id, { publicPortfolioChallenge: next });
-                              if (ok) toast.success('Challenge updated');
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0 self-start"
+                            disabled={togglingProjectId === p.id}
+                            title={p.showOnPublicWebsite ? 'Visible on website — click to hide' : 'Hidden — click to show on website'}
+                            onClick={async () => {
+                              setTogglingProjectId(p.id);
+                              const next = !p.showOnPublicWebsite;
+                              const ok = await patchProjectWebsite(p.id, { showOnPublicWebsite: next });
+                              setTogglingProjectId(null);
+                              if (ok) {
+                                toast.success(next ? 'Shown on public website' : 'Hidden from public website');
+                              }
                             }}
-                          />
-                          <Textarea
-                            placeholder="Our Solution (public case study)"
-                            className="min-h-[72px] text-sm resize-y"
-                            defaultValue={p.publicPortfolioSolution ?? ''}
-                            key={`sol-${p.id}-${p.publicPortfolioSolution ?? ''}`}
-                            onBlur={async (e) => {
-                              const next = e.target.value.trim() || null;
-                              const prev = p.publicPortfolioSolution ?? null;
-                              if (next === prev) return;
-                              const ok = await patchProjectWebsite(p.id, { publicPortfolioSolution: next });
-                              if (ok) toast.success('Solution updated');
-                            }}
-                          />
+                          >
+                            {p.showOnPublicWebsite ? (
+                              <Eye className="h-4 w-4 text-[var(--amd-black)]" />
+                            ) : (
+                              <EyeOff className="h-4 w-4 text-[var(--amd-gray-400)]" />
+                            )}
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="shrink-0"
-                          disabled={togglingProjectId === p.id}
-                          title={p.showOnPublicWebsite ? 'Visible on website — click to hide' : 'Hidden — click to show on website'}
-                          onClick={async () => {
-                            setTogglingProjectId(p.id);
-                            const next = !p.showOnPublicWebsite;
-                            const ok = await patchProjectWebsite(p.id, { showOnPublicWebsite: next });
-                            setTogglingProjectId(null);
-                            if (ok) {
-                              toast.success(next ? 'Shown on public website' : 'Hidden from public website');
-                            }
-                          }}
-                        >
-                          {p.showOnPublicWebsite ? (
-                            <Eye className="h-4 w-4 text-[var(--amd-black)]" />
-                          ) : (
-                            <EyeOff className="h-4 w-4 text-[var(--amd-gray-400)]" />
-                          )}
-                        </Button>
+                        <div className="grid gap-3 border-t border-[var(--amd-gray-100)] pt-3 sm:grid-cols-2">
+                          <div className="space-y-1.5 min-w-0">
+                            <Label htmlFor={`portfolio-ch-${p.id}`} className="text-xs font-medium text-[var(--amd-black)]">
+                              The Challenge
+                            </Label>
+                            <Textarea
+                              id={`portfolio-ch-${p.id}`}
+                              placeholder="What problem did the client face? (public case study)"
+                              className="min-h-[88px] text-sm resize-y"
+                              defaultValue={p.publicPortfolioChallenge ?? ''}
+                              key={`ch-${p.id}-${p.publicPortfolioChallenge ?? ''}`}
+                              onBlur={async (e) => {
+                                const next = e.target.value.trim() || null;
+                                const prev = p.publicPortfolioChallenge ?? null;
+                                if (next === prev) return;
+                                const ok = await patchProjectWebsite(p.id, { publicPortfolioChallenge: next });
+                                if (ok) toast.success('Challenge updated');
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1.5 min-w-0">
+                            <Label htmlFor={`portfolio-sol-${p.id}`} className="text-xs font-medium text-[var(--amd-black)]">
+                              Our Solution
+                            </Label>
+                            <Textarea
+                              id={`portfolio-sol-${p.id}`}
+                              placeholder="How did you solve it? (public case study)"
+                              className="min-h-[88px] text-sm resize-y"
+                              defaultValue={p.publicPortfolioSolution ?? ''}
+                              key={`sol-${p.id}-${p.publicPortfolioSolution ?? ''}`}
+                              onBlur={async (e) => {
+                                const next = e.target.value.trim() || null;
+                                const prev = p.publicPortfolioSolution ?? null;
+                                if (next === prev) return;
+                                const ok = await patchProjectWebsite(p.id, { publicPortfolioSolution: next });
+                                if (ok) toast.success('Solution updated');
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
