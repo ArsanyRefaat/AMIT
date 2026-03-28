@@ -27,6 +27,8 @@ using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
 using System.Net;
 using System.Net.Mail;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -559,6 +561,13 @@ if (app.Environment.IsDevelopment())
 
 // In development we serve HTTP only to avoid HTTPS redirect / dev-certificate issues with fetch.
 app.UseCors();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "public,max-age=86400";
+    },
+});
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -818,6 +827,70 @@ app.MapPatch("/api/projects/{id:int}/website", async (int id, PatchProjectWebsit
     var updated = await service.PatchWebsiteAsync(id, request, ct);
     return updated is null ? Results.NotFound() : Results.Ok(updated);
 });
+
+// Portfolio image upload (saves under wwwroot/uploads/portfolio; requires sign-in).
+// Set PublicBaseUrl in appsettings or PUBLIC_BASE_URL when the API is behind a reverse proxy so image URLs are correct.
+app.MapPost("/api/projects/{id:int}/portfolio-image", async (
+    int id,
+    IFormFile file,
+    IProjectService projectService,
+    IWebHostEnvironment env,
+    IConfiguration config,
+    HttpRequest request,
+    CancellationToken ct) =>
+{
+    if (file is null || file.Length == 0)
+    {
+        return Results.BadRequest(new { error = "No file uploaded. Use form field name \"file\"." });
+    }
+
+    const long maxBytes = 5 * 1024 * 1024;
+    if (file.Length > maxBytes)
+    {
+        return Results.BadRequest(new { error = "Image must be 5 MB or smaller." });
+    }
+
+    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+    if (!allowed.Contains(ext))
+    {
+        return Results.BadRequest(new { error = "Allowed types: JPG, PNG, GIF, WebP." });
+    }
+
+    var webRoot = env.WebRootPath;
+    if (string.IsNullOrEmpty(webRoot))
+    {
+        webRoot = Path.Combine(env.ContentRootPath, "wwwroot");
+    }
+
+    var uploadDir = Path.Combine(webRoot, "uploads", "portfolio");
+    Directory.CreateDirectory(uploadDir);
+
+    var safeName = $"p{id}-{Guid.NewGuid():N}{ext}";
+    var physicalPath = Path.Combine(uploadDir, safeName);
+    await using (var stream = File.Create(physicalPath))
+    {
+        await file.CopyToAsync(stream, ct);
+    }
+
+    var configured = config["PublicBaseUrl"]?.Trim().TrimEnd('/');
+    if (string.IsNullOrEmpty(configured))
+    {
+        configured = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL")?.Trim().TrimEnd('/');
+    }
+
+    var baseUrl = !string.IsNullOrEmpty(configured)
+        ? configured
+        : $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
+
+    var publicUrl = $"{baseUrl}/uploads/portfolio/{safeName}";
+
+    var patch = new PatchProjectWebsiteRequest { PublicPortfolioImageUrl = publicUrl };
+    var updated = await projectService.PatchWebsiteAsync(id, patch, ct);
+    return updated is null ? Results.NotFound() : Results.Ok(updated);
+})
+.RequireAuthorization()
+.DisableAntiforgery();
 
 // Public portfolio (no auth; used by marketing site)
 app.MapGet("/api/public/portfolio", async (IProjectService service, CancellationToken ct) =>

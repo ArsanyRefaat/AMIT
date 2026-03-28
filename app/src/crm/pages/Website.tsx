@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Layout, FileText, Image, MessageSquare, Settings, ExternalLink, Save, Plus, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Layout, FileText, Image, MessageSquare, Settings, ExternalLink, Save, Plus, Eye, EyeOff, ArrowUp, ArrowDown, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, authHeaders } from '@/lib/api';
 
 type WebsiteSettingsForm = {
   heroTitle: string;
@@ -49,6 +49,7 @@ type CrmProjectForWebsite = {
   customerName: string;
   showOnPublicWebsite: boolean;
   websiteCategory: string | null;
+  publicPortfolioImageUrl: string | null;
 };
 
 export function Website() {
@@ -71,6 +72,9 @@ export function Website() {
   const [crmProjects, setCrmProjects] = useState<CrmProjectForWebsite[]>([]);
   const [crmProjectsLoading, setCrmProjectsLoading] = useState(false);
   const [togglingProjectId, setTogglingProjectId] = useState<number | null>(null);
+  const portfolioUploadInputRef = useRef<HTMLInputElement>(null);
+  const [portfolioUploadForId, setPortfolioUploadForId] = useState<number | null>(null);
+  const [uploadingPortfolioId, setUploadingPortfolioId] = useState<number | null>(null);
 
   const loadCrmProjects = async () => {
     setCrmProjectsLoading(true);
@@ -83,6 +87,7 @@ export function Website() {
         customerName: string;
         showOnPublicWebsite?: boolean;
         websiteCategory?: string | null;
+        publicPortfolioImageUrl?: string | null;
       }[] = await res.json();
       setCrmProjects(
         data.map((p) => ({
@@ -91,6 +96,7 @@ export function Website() {
           customerName: p.customerName,
           showOnPublicWebsite: p.showOnPublicWebsite ?? false,
           websiteCategory: p.websiteCategory ?? null,
+          publicPortfolioImageUrl: p.publicPortfolioImageUrl ?? null,
         })),
       );
     } catch {
@@ -102,7 +108,11 @@ export function Website() {
 
   const patchProjectWebsite = async (
     id: number,
-    patch: { showOnPublicWebsite?: boolean; websiteCategory?: string | null },
+    patch: {
+      showOnPublicWebsite?: boolean;
+      websiteCategory?: string | null;
+      publicPortfolioImageUrl?: string | null;
+    },
   ) => {
     const res = await fetch(`${API_BASE}/api/projects/${id}/website`, {
       method: 'PATCH',
@@ -113,7 +123,11 @@ export function Website() {
       toast.error('Could not update project.');
       return false;
     }
-    const updated: { showOnPublicWebsite?: boolean; websiteCategory?: string | null } = await res.json();
+    const updated: {
+      showOnPublicWebsite?: boolean;
+      websiteCategory?: string | null;
+      publicPortfolioImageUrl?: string | null;
+    } = await res.json();
     setCrmProjects((prev) =>
       prev.map((p) =>
         p.id === id
@@ -122,11 +136,79 @@ export function Website() {
               showOnPublicWebsite: updated.showOnPublicWebsite ?? p.showOnPublicWebsite,
               websiteCategory:
                 updated.websiteCategory !== undefined ? updated.websiteCategory ?? null : p.websiteCategory,
+              publicPortfolioImageUrl:
+                updated.publicPortfolioImageUrl !== undefined
+                  ? updated.publicPortfolioImageUrl ?? null
+                  : p.publicPortfolioImageUrl,
             }
           : p,
       ),
     );
     return true;
+  };
+
+  const startPortfolioImageUpload = (projectId: number) => {
+    if (!authHeaders().Authorization) {
+      toast.error('Sign in to upload images.');
+      return;
+    }
+    setPortfolioUploadForId(projectId);
+    portfolioUploadInputRef.current?.click();
+  };
+
+  const handlePortfolioImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const id = portfolioUploadForId;
+    setPortfolioUploadForId(null);
+    if (!file || id == null) return;
+    const headers = authHeaders();
+    if (!headers.Authorization) {
+      toast.error('Sign in to upload images.');
+      return;
+    }
+    setUploadingPortfolioId(id);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_BASE}/api/projects/${id}/portfolio-image`, {
+        method: 'POST',
+        headers,
+        body: fd,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = text || 'Upload failed';
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          if (j?.error) msg = j.error;
+        } catch {
+          // use text
+        }
+        if (res.status === 401) msg = 'Sign in to upload images.';
+        toast.error(msg);
+        return;
+      }
+      const updated: { publicPortfolioImageUrl?: string | null } = JSON.parse(text);
+      setCrmProjects((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                publicPortfolioImageUrl:
+                  updated.publicPortfolioImageUrl !== undefined
+                    ? updated.publicPortfolioImageUrl ?? null
+                    : p.publicPortfolioImageUrl,
+              }
+            : p,
+        ),
+      );
+      toast.success('Image uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingPortfolioId(null);
+    }
   };
 
   useEffect(() => {
@@ -586,7 +668,7 @@ export function Website() {
               <CardHeader>
                 <CardTitle className="font-heading text-lg">Portfolio on public website</CardTitle>
                 <p className="text-sm text-[var(--amd-gray-500)] mt-1">
-                  Choose which CRM projects appear on the main site under <strong>Work</strong>. Use the eye to show or hide. Set a short category label (e.g. Branding) for the gold tag on the card.
+                  Choose which CRM projects appear on the main site under <strong>Work</strong>. Use the eye to show or hide. Set a category and a portfolio image — paste a URL or upload a file (stored on the server).
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -598,21 +680,28 @@ export function Website() {
                   </p>
                 ) : (
                   <div className="space-y-3">
+                    <input
+                      ref={portfolioUploadInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={handlePortfolioImageFile}
+                    />
                     {crmProjects.map((p) => (
                       <div
                         key={p.id}
-                        className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--amd-gray-100)] p-3"
+                        className="flex flex-col gap-3 rounded-lg border border-[var(--amd-gray-100)] p-3 sm:flex-row sm:flex-wrap sm:items-center"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-[var(--amd-black)] truncate">{p.name}</p>
                           <p className="text-xs text-[var(--amd-gray-500)]">{p.customerName}</p>
                         </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto sm:max-w-[200px]">
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[220px] sm:max-w-md sm:flex-1">
                           <Input
                             placeholder="Category (e.g. Branding)"
                             className="h-9 text-sm"
                             defaultValue={p.websiteCategory ?? ''}
-                            key={`${p.id}-${p.websiteCategory ?? ''}`}
+                            key={`cat-${p.id}-${p.websiteCategory ?? ''}`}
                             onBlur={async (e) => {
                               const next = e.target.value.trim() || null;
                               const prev = p.websiteCategory ?? null;
@@ -621,6 +710,34 @@ export function Website() {
                               if (ok) toast.success('Category updated');
                             }}
                           />
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              placeholder="Portfolio image URL (https://…)"
+                              className="h-9 text-sm flex-1 min-w-0"
+                              type="url"
+                              inputMode="url"
+                              defaultValue={p.publicPortfolioImageUrl ?? ''}
+                              key={`img-${p.id}-${p.publicPortfolioImageUrl ?? ''}`}
+                              onBlur={async (e) => {
+                                const next = e.target.value.trim() || null;
+                                const prev = p.publicPortfolioImageUrl ?? null;
+                                if (next === prev) return;
+                                const ok = await patchProjectWebsite(p.id, { publicPortfolioImageUrl: next });
+                                if (ok) toast.success('Portfolio image URL updated');
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9 shrink-0"
+                              disabled={uploadingPortfolioId === p.id}
+                              title="Upload image from device"
+                              onClick={() => startPortfolioImageUpload(p.id)}
+                            >
+                              <Upload className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         <Button
                           type="button"

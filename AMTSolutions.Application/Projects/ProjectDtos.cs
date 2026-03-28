@@ -12,7 +12,8 @@ public sealed record ProjectDto(
     DateTime? StartDateUtc,
     DateTime? EndDateUtc,
     bool ShowOnPublicWebsite,
-    string? WebsiteCategory
+    string? WebsiteCategory,
+    string? PublicPortfolioImageUrl
 );
 
 public sealed record CreateProjectRequest(
@@ -23,7 +24,8 @@ public sealed record CreateProjectRequest(
     DateTime? StartDateUtc,
     DateTime? EndDateUtc,
     bool ShowOnPublicWebsite = false,
-    string? WebsiteCategory = null
+    string? WebsiteCategory = null,
+    string? PublicPortfolioImageUrl = null
 );
 
 /// <summary>Optional fields: only properties present in JSON are applied.</summary>
@@ -31,6 +33,7 @@ public sealed record PatchProjectWebsiteRequest
 {
     public bool? ShowOnPublicWebsite { get; init; }
     public string? WebsiteCategory { get; init; }
+    public string? PublicPortfolioImageUrl { get; init; }
 }
 
 public sealed record PublicPortfolioItemDto(
@@ -40,6 +43,7 @@ public sealed record PublicPortfolioItemDto(
     string Category,
     string ClientName,
     string ShortDescription,
+    string? ImageUrl,
     IReadOnlyList<PublicPortfolioResultDto> Results);
 
 public sealed record PublicPortfolioResultDto(string Metric, string Value);
@@ -52,6 +56,7 @@ public sealed record PublicPortfolioDetailDto(
     string ClientName,
     string ShortDescription,
     string? FullDescription,
+    string? ImageUrl,
     IReadOnlyList<PublicPortfolioResultDto> Results,
     string DateLabel);
 

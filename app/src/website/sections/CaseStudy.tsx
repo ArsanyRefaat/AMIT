@@ -18,6 +18,7 @@ type ApiPortfolioDetail = {
   clientName: string;
   shortDescription: string;
   fullDescription: string | null;
+  imageUrl?: string | null;
   results: { metric: string; value: string }[];
   dateLabel: string;
 };
@@ -33,6 +34,7 @@ function toViewFromMock(cs: PortfolioItem) {
     problem: cs.problem,
     solution: cs.solution,
     deliverables: cs.deliverables,
+    heroImageUrl: cs.featuredImage?.trim() || undefined,
   };
 }
 
@@ -59,6 +61,7 @@ function toViewFromApi(d: ApiPortfolioDetail) {
         : d.shortDescription,
     solution: body.length > 0 ? body : d.shortDescription,
     deliverables: deliverables.length > 0 ? deliverables : [d.shortDescription],
+    heroImageUrl: d.imageUrl?.trim() || undefined,
   };
 }
 
@@ -171,6 +174,20 @@ export function CaseStudy({ slug, onNavigate }: CaseStudyProps) {
           </motion.div>
         </div>
       </section>
+
+      {caseStudy.heroImageUrl ? (
+        <section className="bg-white border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
+            <img
+              src={caseStudy.heroImageUrl}
+              alt=""
+              className="w-full max-h-[min(70vh,520px)] rounded-xl object-cover shadow-sm"
+              loading="eager"
+              decoding="async"
+            />
+          </div>
+        </section>
+      ) : null}
 
       <section className="py-10 md:py-16 bg-[#C9A962]/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

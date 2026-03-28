@@ -19,10 +19,12 @@ type PublicPortfolioApi = {
   category: string;
   clientName: string;
   shortDescription: string;
+  imageUrl?: string | null;
   results: { metric: string; value: string }[];
 };
 
 function mapApiToPortfolioItem(x: PublicPortfolioApi): PortfolioItem {
+  const url = x.imageUrl?.trim() ?? '';
   return {
     id: `crm-${x.id}`,
     slug: x.slug,
@@ -34,8 +36,8 @@ function mapApiToPortfolioItem(x: PublicPortfolioApi): PortfolioItem {
     solution: '',
     deliverables: [],
     results: x.results.map((r) => ({ metric: r.metric, value: r.value })),
-    images: [],
-    featuredImage: '',
+    images: url ? [url] : [],
+    featuredImage: url,
     date: new Date().toISOString().slice(0, 10),
     isFeatured: true,
     isActive: true,
@@ -132,9 +134,22 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
                 onClick={() => onNavigate('case-study', { caseStudy: item.slug })}
               >
                 <div className="relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-shadow">
-                  {/* Image Placeholder */}
+                  {/* Image or placeholder */}
                   <div className="aspect-[4/3] bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center relative overflow-hidden">
-                    <div className="text-center p-6 md:p-8">
+                    {item.featuredImage?.trim() ? (
+                      <img
+                        src={item.featuredImage.trim()}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : null}
+                    <div
+                      className={`text-center p-6 md:p-8 relative z-[1] ${
+                        item.featuredImage?.trim() ? 'opacity-0 pointer-events-none' : ''
+                      }`}
+                    >
                       <div className="w-14 h-14 md:w-16 md:h-16 mx-auto mb-3 md:mb-4 rounded-full bg-white/80 flex items-center justify-center">
                         <ExternalLink className="w-6 h-6 md:w-7 md:h-7 text-gray-500" />
                       </div>
@@ -144,7 +159,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
                     </div>
 
                     {/* Hover Overlay */}
-                    <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-[2]">
                       <button className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-black text-sm font-medium rounded-full flex items-center gap-2 hover:bg-[#C9A962] transition-colors">
                         View Case Study
                         <ArrowRight className="w-4 h-4" />

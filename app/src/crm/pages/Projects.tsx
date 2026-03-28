@@ -1,5 +1,5 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { Search, Plus, MoreHorizontal, Calendar, Users, CheckCircle2, FolderKanban, Edit2, Trash2, Eye, X, Receipt } from 'lucide-react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { Search, Plus, MoreHorizontal, Calendar, Users, CheckCircle2, FolderKanban, Edit2, Trash2, Eye, X, Receipt, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,7 +21,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { users } from '@/data/mockData';
 import type { Expense, Invoice, Project, ProjectStatus } from '@/types';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, authHeaders } from '@/lib/api';
 
 const statusColors: Record<string, string> = {
   planning: 'bg-gray-100 text-gray-700',
@@ -62,6 +62,8 @@ type ProjectFormData = {
   startDate: string;
   endDate: string;
   budget: string;
+  /** Public portfolio image (HTTPS URL). */
+  publicPortfolioImageUrl: string;
 };
 
 function toCustomerReference(id: string, name: string): Project['customer'] {
@@ -86,10 +88,16 @@ function ProjectForm({
   formData,
   setFormData,
   customers,
+  showDeviceUpload,
+  onPickDeviceImage,
+  uploadingDeviceImage,
 }: {
   formData: ProjectFormData;
   setFormData: Dispatch<SetStateAction<ProjectFormData>>;
   customers: { id: string; name: string }[];
+  showDeviceUpload?: boolean;
+  onPickDeviceImage?: () => void;
+  uploadingDeviceImage?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -206,6 +214,38 @@ function ProjectForm({
           onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
         />
       </div>
+      <div className="space-y-2">
+        <Label htmlFor="publicPortfolioImageUrl">Portfolio image URL (optional)</Label>
+        <Input
+          id="publicPortfolioImageUrl"
+          type="url"
+          inputMode="url"
+          placeholder="https://…"
+          value={formData.publicPortfolioImageUrl}
+          onChange={(e) => setFormData({ ...formData, publicPortfolioImageUrl: e.target.value })}
+        />
+        <p className="text-xs text-gray-500">
+          Shown on the public Work section.{' '}
+          {showDeviceUpload
+            ? 'Paste a link, or upload a file — it is stored on the server and the URL is filled in for you.'
+            : 'Paste a direct link, or after you create the project use Edit to upload an image from your device.'}
+        </p>
+        {showDeviceUpload && onPickDeviceImage && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploadingDeviceImage}
+              onClick={onPickDeviceImage}
+            >
+              <Upload className="w-4 h-4 mr-1.5" />
+              {uploadingDeviceImage ? 'Uploading…' : 'Upload from device'}
+            </Button>
+            <span className="text-xs text-gray-500">JPG, PNG, GIF, WebP · max 5 MB · requires sign-in</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -233,7 +273,11 @@ export function Projects() {
     startDate: '',
     endDate: '',
     budget: '',
+    publicPortfolioImageUrl: '',
   });
+
+  const portfolioFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPortfolioImage, setUploadingPortfolioImage] = useState(false);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -268,6 +312,7 @@ export function Projects() {
           endDateUtc?: string;
           showOnPublicWebsite?: boolean;
           websiteCategory?: string | null;
+          publicPortfolioImageUrl?: string | null;
         }[] = await projRes.json();
 
         let tasksMap: Record<string, ProjectTaskSummary[]> = {};
@@ -323,6 +368,7 @@ export function Projects() {
             progress,
             showOnPublicWebsite: p.showOnPublicWebsite ?? false,
             websiteCategory: p.websiteCategory ?? null,
+            publicPortfolioImageUrl: p.publicPortfolioImageUrl ?? null,
             teamMembers: [],
             tasks: tasksForProject.map((t) => t.id),
             invoices: [],
@@ -354,7 +400,7 @@ export function Projects() {
   const resetForm = () => {
     setFormData({
       name: '', description: '', customer: '', status: 'planning', priority: 'medium',
-      projectManager: '', startDate: '', endDate: '', budget: '',
+      projectManager: '', startDate: '', endDate: '', budget: '', publicPortfolioImageUrl: '',
     });
   };
 
@@ -368,6 +414,7 @@ export function Projects() {
       endDateUtc: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
       showOnPublicWebsite: false,
       websiteCategory: null as string | null,
+      publicPortfolioImageUrl: formData.publicPortfolioImageUrl.trim() || undefined,
     };
 
     const res = await fetch(`${API_BASE}/api/projects`, {
@@ -389,6 +436,7 @@ export function Projects() {
       endDateUtc?: string;
       showOnPublicWebsite?: boolean;
       websiteCategory?: string | null;
+      publicPortfolioImageUrl?: string | null;
     } = await res.json();
 
     const newProject: Project = {
@@ -406,6 +454,7 @@ export function Projects() {
       progress: Number(created.progressPercent ?? 0),
       showOnPublicWebsite: created.showOnPublicWebsite ?? false,
       websiteCategory: created.websiteCategory ?? null,
+      publicPortfolioImageUrl: created.publicPortfolioImageUrl ?? null,
       teamMembers: [],
       tasks: [],
       invoices: [],
@@ -433,6 +482,7 @@ export function Projects() {
         endDateUtc: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
         showOnPublicWebsite: selectedProject.showOnPublicWebsite ?? false,
         websiteCategory: selectedProject.websiteCategory ?? null,
+        publicPortfolioImageUrl: formData.publicPortfolioImageUrl.trim() || undefined,
       };
 
       const res = await fetch(`${API_BASE}/api/projects/${selectedProject.id}`, {
@@ -466,6 +516,7 @@ export function Projects() {
         endDateUtc?: string;
         showOnPublicWebsite?: boolean;
         websiteCategory?: string | null;
+        publicPortfolioImageUrl?: string | null;
       } = JSON.parse(text);
 
       setProjects((prev) => prev.map((project) =>
@@ -484,6 +535,10 @@ export function Projects() {
               progress: Number(updated.progressPercent ?? project.progress ?? 0),
               showOnPublicWebsite: updated.showOnPublicWebsite ?? project.showOnPublicWebsite,
               websiteCategory: updated.websiteCategory ?? project.websiteCategory,
+              publicPortfolioImageUrl:
+                updated.publicPortfolioImageUrl !== undefined
+                  ? updated.publicPortfolioImageUrl ?? null
+                  : project.publicPortfolioImageUrl,
               updatedAt: new Date().toISOString(),
             }
           : project
@@ -526,6 +581,70 @@ export function Projects() {
     }
   };
 
+  const handlePortfolioImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const projectId = selectedProject?.id;
+    if (!projectId) return;
+    const headers = authHeaders();
+    if (!headers.Authorization) {
+      toast.error('Sign in to upload images.');
+      return;
+    }
+    setUploadingPortfolioImage(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}/portfolio-image`, {
+        method: 'POST',
+        headers,
+        body: fd,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = text || 'Upload failed';
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          if (j?.error) msg = j.error;
+        } catch {
+          // use text
+        }
+        if (res.status === 401) msg = 'Sign in to upload images.';
+        toast.error(msg);
+        return;
+      }
+      const updated: { publicPortfolioImageUrl?: string | null } = JSON.parse(text);
+      const url = updated.publicPortfolioImageUrl ?? '';
+      setFormData((prev) => ({ ...prev, publicPortfolioImageUrl: url }));
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                publicPortfolioImageUrl: updated.publicPortfolioImageUrl ?? null,
+                updatedAt: new Date().toISOString(),
+              }
+            : p,
+        ),
+      );
+      setSelectedProject((prev) =>
+        prev && prev.id === projectId
+          ? {
+              ...prev,
+              publicPortfolioImageUrl: updated.publicPortfolioImageUrl ?? null,
+              updatedAt: new Date().toISOString(),
+            }
+          : prev,
+      );
+      toast.success('Image uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingPortfolioImage(false);
+    }
+  };
+
   const openCreateDialog = () => { resetForm(); setIsCreateDialogOpen(true); };
   
   const openEditDialog = (project: Project) => {
@@ -536,6 +655,7 @@ export function Projects() {
       projectManager: project.projectManager?.id || '',
       startDate: project.startDate || '', endDate: project.endDate || '',
       budget: project.budget?.toString() || '',
+      publicPortfolioImageUrl: project.publicPortfolioImageUrl ?? '',
     });
     setIsEditDialogOpen(true);
   };
@@ -660,7 +780,7 @@ export function Projects() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create New Project</DialogTitle></DialogHeader>
-          <ProjectForm formData={formData} setFormData={setFormData} customers={customers} />
+          <ProjectForm formData={formData} setFormData={setFormData} customers={customers} showDeviceUpload={false} />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button onClick={handleCreateAsync} className="bg-black hover:bg-gray-800 text-white">Create Project</Button>
@@ -672,7 +792,21 @@ export function Projects() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Project</DialogTitle></DialogHeader>
-          <ProjectForm formData={formData} setFormData={setFormData} customers={customers} />
+          <input
+            ref={portfolioFileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            className="hidden"
+            onChange={handlePortfolioImageFile}
+          />
+          <ProjectForm
+            formData={formData}
+            setFormData={setFormData}
+            customers={customers}
+            showDeviceUpload
+            onPickDeviceImage={() => portfolioFileInputRef.current?.click()}
+            uploadingDeviceImage={uploadingPortfolioImage}
+          />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button onClick={handleEdit} className="bg-black hover:bg-gray-800 text-white">Save Changes</Button>

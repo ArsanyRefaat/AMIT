@@ -27,7 +27,8 @@ public sealed class ProjectService : IProjectService
             p.StartDateUtc,
             p.EndDateUtc,
             p.ShowOnPublicWebsite,
-            p.WebsiteCategory
+            p.WebsiteCategory,
+            p.PublicPortfolioImageUrl
         );
 
     private static IReadOnlyList<PublicPortfolioResultDto> BuildResults(Project p)
@@ -70,6 +71,9 @@ public sealed class ProjectService : IProjectService
             EndDateUtc = request.EndDateUtc,
             ShowOnPublicWebsite = request.ShowOnPublicWebsite,
             WebsiteCategory = string.IsNullOrWhiteSpace(request.WebsiteCategory) ? null : request.WebsiteCategory.Trim(),
+            PublicPortfolioImageUrl = string.IsNullOrWhiteSpace(request.PublicPortfolioImageUrl)
+                ? null
+                : request.PublicPortfolioImageUrl.Trim(),
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
@@ -102,6 +106,9 @@ public sealed class ProjectService : IProjectService
         project.EndDateUtc = request.EndDateUtc;
         project.ShowOnPublicWebsite = request.ShowOnPublicWebsite;
         project.WebsiteCategory = string.IsNullOrWhiteSpace(request.WebsiteCategory) ? null : request.WebsiteCategory.Trim();
+        project.PublicPortfolioImageUrl = string.IsNullOrWhiteSpace(request.PublicPortfolioImageUrl)
+            ? null
+            : request.PublicPortfolioImageUrl.Trim();
         project.UpdatedAtUtc = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -148,6 +155,13 @@ public sealed class ProjectService : IProjectService
                 : request.WebsiteCategory.Trim();
         }
 
+        if (request.PublicPortfolioImageUrl is not null)
+        {
+            project.PublicPortfolioImageUrl = string.IsNullOrWhiteSpace(request.PublicPortfolioImageUrl)
+                ? null
+                : request.PublicPortfolioImageUrl.Trim();
+        }
+
         project.UpdatedAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -188,6 +202,7 @@ public sealed class ProjectService : IProjectService
                 category,
                 x.CustomerName,
                 shortDesc,
+                string.IsNullOrWhiteSpace(p.PublicPortfolioImageUrl) ? null : p.PublicPortfolioImageUrl.Trim(),
                 BuildResults(p));
         }).ToList();
     }
@@ -235,6 +250,7 @@ public sealed class ProjectService : IProjectService
             row.CustomerName,
             shortDesc,
             p.Description,
+            string.IsNullOrWhiteSpace(p.PublicPortfolioImageUrl) ? null : p.PublicPortfolioImageUrl.Trim(),
             BuildResults(p),
             dateLabel);
     }

@@ -252,6 +252,8 @@ export interface Project {
   showOnPublicWebsite?: boolean;
   /** Label on the public site (e.g. Branding). Optional. */
   websiteCategory?: string | null;
+  /** HTTPS URL for the portfolio card / case study hero image (host file elsewhere). */
+  publicPortfolioImageUrl?: string | null;
 }
 
 export interface Deliverable {

@@ -16,5 +16,8 @@ public class Project : BaseEntity
 
     /// <summary>Optional label on the public site (e.g. Branding, Web Design). Max length enforced in API.</summary>
     public string? WebsiteCategory { get; set; }
+
+    /// <summary>HTTPS URL for the image on the public portfolio / case study (host the file on your site or CDN).</summary>
+    public string? PublicPortfolioImageUrl { get; set; }
 }
 
