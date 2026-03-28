@@ -49,6 +49,15 @@ if (!string.IsNullOrWhiteSpace(databaseUrl))
         var host = uri.Host;
         var port = uri.Port > 0 ? uri.Port : 5432;
 
+        // Render and many clouds have no IPv6 egress. Supabase "Direct" (db.*.supabase.co) often resolves to IPv6 only —
+        // use Dashboard → Connect → Session pooler (IPv4-compatible), not the direct URI. See:
+        // https://supabase.com/docs/guides/troubleshooting/supabase--your-network-ipv4-and-ipv6-compatibility
+        if (host.Contains("db.", StringComparison.OrdinalIgnoreCase) &&
+            host.Contains("supabase.co", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("[DB CONFIG] Using direct db.*.supabase.co — if you see IPv6 'Network is unreachable' on Render, switch DATABASE_URL to the Session pooler URI (Connect → Session pooler).");
+        }
+
         configuredConnectionString = $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true";
         postgresFromDatabaseUrl = true;
     }
@@ -414,9 +423,15 @@ var app = builder.Build();
 // Seed Identity roles/users and ensure CompanySettings row/table exist
 using (var scope = app.Services.CreateScope())
 {
-    await IdentitySeeder.SeedAsync(scope.ServiceProvider);
-
     var db = scope.ServiceProvider.GetRequiredService<AmtsDbContext>();
+
+    // PostgreSQL (e.g. Supabase on Render): apply schema so Identity tables (AspNetRoles, etc.) exist before seeding.
+    if (!useInMemoryFallback && db.Database.IsNpgsql())
+    {
+        await db.Database.MigrateAsync();
+    }
+
+    await IdentitySeeder.SeedAsync(scope.ServiceProvider);
 
     if (db.Database.IsSqlServer())
     {
