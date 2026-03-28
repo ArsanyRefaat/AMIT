@@ -254,6 +254,10 @@ export interface Project {
   websiteCategory?: string | null;
   /** HTTPS URL for the portfolio card / case study hero image (host file elsewhere). */
   publicPortfolioImageUrl?: string | null;
+  /** Public case study: &quot;The Challenge&quot; section. */
+  publicPortfolioChallenge?: string | null;
+  /** Public case study: &quot;Our Solution&quot; section. */
+  publicPortfolioSolution?: string | null;
 }
 
 export interface Deliverable {

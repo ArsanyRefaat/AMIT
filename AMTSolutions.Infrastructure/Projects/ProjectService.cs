@@ -28,14 +28,34 @@ public sealed class ProjectService : IProjectService
             p.EndDateUtc,
             p.ShowOnPublicWebsite,
             p.WebsiteCategory,
-            p.PublicPortfolioImageUrl
+            p.PublicPortfolioImageUrl,
+            p.PublicPortfolioChallenge,
+            p.PublicPortfolioSolution
         );
 
-    private static IReadOnlyList<PublicPortfolioResultDto> BuildResults(Project p)
+    /// <summary>
+    /// Matches CRM: use stored ProgressPercent when &gt; 0; otherwise derive from completed tasks.
+    /// </summary>
+    private static int ComputeDisplayProgressPercent(Project p, int totalTasks, int completedTasks)
+    {
+        if (p.ProgressPercent > 0)
+        {
+            return (int)Math.Round(p.ProgressPercent, MidpointRounding.AwayFromZero);
+        }
+
+        if (totalTasks > 0)
+        {
+            return (int)Math.Round((decimal)completedTasks / totalTasks * 100m, MidpointRounding.AwayFromZero);
+        }
+
+        return 0;
+    }
+
+    private static IReadOnlyList<PublicPortfolioResultDto> BuildResults(Project p, int displayProgressPercent)
     {
         var list = new List<PublicPortfolioResultDto>
         {
-            new("Progress", $"{p.ProgressPercent:0}%"),
+            new("Progress", $"{displayProgressPercent}%"),
         };
         if (p.Budget > 0)
         {
@@ -43,6 +63,30 @@ public sealed class ProjectService : IProjectService
         }
 
         return list;
+    }
+
+    private async Task<Dictionary<int, (int Total, int Completed)>> GetTaskCompletionByProjectIdsAsync(
+        IReadOnlyList<int> projectIds,
+        CancellationToken cancellationToken)
+    {
+        if (projectIds.Count == 0)
+        {
+            return new Dictionary<int, (int Total, int Completed)>();
+        }
+
+        var rows = await _db.Tasks
+            .AsNoTracking()
+            .Where(t => projectIds.Contains(t.ProjectId))
+            .GroupBy(t => t.ProjectId)
+            .Select(g => new
+            {
+                ProjectId = g.Key,
+                Total = g.Count(),
+                Completed = g.Count(t => t.Status == Core.Enums.TaskStatus.Completed),
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(x => x.ProjectId, x => (x.Total, x.Completed));
     }
 
     public async Task<IReadOnlyList<ProjectDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -74,6 +118,12 @@ public sealed class ProjectService : IProjectService
             PublicPortfolioImageUrl = string.IsNullOrWhiteSpace(request.PublicPortfolioImageUrl)
                 ? null
                 : request.PublicPortfolioImageUrl.Trim(),
+            PublicPortfolioChallenge = string.IsNullOrWhiteSpace(request.PublicPortfolioChallenge)
+                ? null
+                : request.PublicPortfolioChallenge.Trim(),
+            PublicPortfolioSolution = string.IsNullOrWhiteSpace(request.PublicPortfolioSolution)
+                ? null
+                : request.PublicPortfolioSolution.Trim(),
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
@@ -109,6 +159,12 @@ public sealed class ProjectService : IProjectService
         project.PublicPortfolioImageUrl = string.IsNullOrWhiteSpace(request.PublicPortfolioImageUrl)
             ? null
             : request.PublicPortfolioImageUrl.Trim();
+        project.PublicPortfolioChallenge = string.IsNullOrWhiteSpace(request.PublicPortfolioChallenge)
+            ? null
+            : request.PublicPortfolioChallenge.Trim();
+        project.PublicPortfolioSolution = string.IsNullOrWhiteSpace(request.PublicPortfolioSolution)
+            ? null
+            : request.PublicPortfolioSolution.Trim();
         project.UpdatedAtUtc = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -162,6 +218,20 @@ public sealed class ProjectService : IProjectService
                 : request.PublicPortfolioImageUrl.Trim();
         }
 
+        if (request.PublicPortfolioChallenge is not null)
+        {
+            project.PublicPortfolioChallenge = string.IsNullOrWhiteSpace(request.PublicPortfolioChallenge)
+                ? null
+                : request.PublicPortfolioChallenge.Trim();
+        }
+
+        if (request.PublicPortfolioSolution is not null)
+        {
+            project.PublicPortfolioSolution = string.IsNullOrWhiteSpace(request.PublicPortfolioSolution)
+                ? null
+                : request.PublicPortfolioSolution.Trim();
+        }
+
         project.UpdatedAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -187,9 +257,14 @@ public sealed class ProjectService : IProjectService
             .OrderByDescending(x => x.p.UpdatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        var projectIds = rows.Select(r => r.p.Id).ToList();
+        var taskStats = await GetTaskCompletionByProjectIdsAsync(projectIds, cancellationToken);
+
         return rows.Select(x =>
         {
             var p = x.p;
+            taskStats.TryGetValue(p.Id, out var tc);
+            var displayPct = ComputeDisplayProgressPercent(p, tc.Total, tc.Completed);
             var slug = $"project-{p.Id}";
             var category = string.IsNullOrWhiteSpace(p.WebsiteCategory) ? "Project" : p.WebsiteCategory!;
             var shortDesc = string.IsNullOrWhiteSpace(p.Description)
@@ -203,7 +278,7 @@ public sealed class ProjectService : IProjectService
                 x.CustomerName,
                 shortDesc,
                 string.IsNullOrWhiteSpace(p.PublicPortfolioImageUrl) ? null : p.PublicPortfolioImageUrl.Trim(),
-                BuildResults(p));
+                BuildResults(p, displayPct));
         }).ToList();
     }
 
@@ -242,6 +317,10 @@ public sealed class ProjectService : IProjectService
             : p.Description!;
         var dateLabel = p.StartDateUtc?.ToString("MMMM yyyy") ?? DateTime.UtcNow.ToString("MMMM yyyy");
 
+        var taskStats = await GetTaskCompletionByProjectIdsAsync(new[] { p.Id }, cancellationToken);
+        taskStats.TryGetValue(p.Id, out var tc);
+        var displayPct = ComputeDisplayProgressPercent(p, tc.Total, tc.Completed);
+
         return new PublicPortfolioDetailDto(
             p.Id,
             $"project-{p.Id}",
@@ -250,8 +329,10 @@ public sealed class ProjectService : IProjectService
             row.CustomerName,
             shortDesc,
             p.Description,
+            string.IsNullOrWhiteSpace(p.PublicPortfolioChallenge) ? null : p.PublicPortfolioChallenge.Trim(),
+            string.IsNullOrWhiteSpace(p.PublicPortfolioSolution) ? null : p.PublicPortfolioSolution.Trim(),
             string.IsNullOrWhiteSpace(p.PublicPortfolioImageUrl) ? null : p.PublicPortfolioImageUrl.Trim(),
-            BuildResults(p),
+            BuildResults(p, displayPct),
             dateLabel);
     }
 }

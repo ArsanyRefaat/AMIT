@@ -18,6 +18,8 @@ type ApiPortfolioDetail = {
   clientName: string;
   shortDescription: string;
   fullDescription: string | null;
+  challenge?: string | null;
+  solution?: string | null;
   imageUrl?: string | null;
   results: { metric: string; value: string }[];
   dateLabel: string;
@@ -40,6 +42,8 @@ function toViewFromMock(cs: PortfolioItem) {
 
 function toViewFromApi(d: ApiPortfolioDetail) {
   const body = d.fullDescription?.trim() ?? '';
+  const challenge = d.challenge?.trim() ?? '';
+  const solution = d.solution?.trim() ?? '';
   const deliverables =
     body.length > 0
       ? body
@@ -48,6 +52,11 @@ function toViewFromApi(d: ApiPortfolioDetail) {
           .filter(Boolean)
           .slice(0, 9)
       : ['Discovery & planning', 'Execution & delivery', 'Review & iteration'];
+  const problem =
+    challenge ||
+    (body.length > 0 ? body.split(/\r?\n\r?\n/)[0] ?? d.shortDescription : d.shortDescription);
+  const solutionText =
+    solution || (body.length > 0 ? body : d.shortDescription);
   return {
     category: d.category,
     title: d.title,
@@ -55,11 +64,8 @@ function toViewFromApi(d: ApiPortfolioDetail) {
     client: d.clientName,
     dateLabel: d.dateLabel,
     results: d.results,
-    problem:
-      body.length > 0
-        ? body.split(/\r?\n\r?\n/)[0] ?? d.shortDescription
-        : d.shortDescription,
-    solution: body.length > 0 ? body : d.shortDescription,
+    problem,
+    solution: solutionText,
     deliverables: deliverables.length > 0 ? deliverables : [d.shortDescription],
     heroImageUrl: d.imageUrl?.trim() || undefined,
   };

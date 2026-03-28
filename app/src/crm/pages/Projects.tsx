@@ -64,6 +64,10 @@ type ProjectFormData = {
   budget: string;
   /** Public portfolio image (HTTPS URL). */
   publicPortfolioImageUrl: string;
+  /** Case study — The Challenge (public site). */
+  publicPortfolioChallenge: string;
+  /** Case study — Our Solution (public site). */
+  publicPortfolioSolution: string;
 };
 
 function toCustomerReference(id: string, name: string): Project['customer'] {
@@ -246,6 +250,32 @@ function ProjectForm({
           </div>
         )}
       </div>
+      <div className="space-y-2 border-t border-gray-100 pt-4">
+        <p className="text-sm font-medium text-gray-800">Public case study (optional)</p>
+        <div className="space-y-2">
+          <Label htmlFor="publicPortfolioChallenge">The Challenge</Label>
+          <Textarea
+            id="publicPortfolioChallenge"
+            value={formData.publicPortfolioChallenge}
+            onChange={(e) => setFormData({ ...formData, publicPortfolioChallenge: e.target.value })}
+            rows={3}
+            placeholder="What problem did the client face?"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="publicPortfolioSolution">Our Solution</Label>
+          <Textarea
+            id="publicPortfolioSolution"
+            value={formData.publicPortfolioSolution}
+            onChange={(e) => setFormData({ ...formData, publicPortfolioSolution: e.target.value })}
+            rows={3}
+            placeholder="How did you solve it?"
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          Shown on the public case study page. Leave empty to fall back to the project description.
+        </p>
+      </div>
     </div>
   );
 }
@@ -274,6 +304,8 @@ export function Projects() {
     endDate: '',
     budget: '',
     publicPortfolioImageUrl: '',
+    publicPortfolioChallenge: '',
+    publicPortfolioSolution: '',
   });
 
   const portfolioFileInputRef = useRef<HTMLInputElement>(null);
@@ -313,6 +345,8 @@ export function Projects() {
           showOnPublicWebsite?: boolean;
           websiteCategory?: string | null;
           publicPortfolioImageUrl?: string | null;
+          publicPortfolioChallenge?: string | null;
+          publicPortfolioSolution?: string | null;
         }[] = await projRes.json();
 
         let tasksMap: Record<string, ProjectTaskSummary[]> = {};
@@ -369,6 +403,8 @@ export function Projects() {
             showOnPublicWebsite: p.showOnPublicWebsite ?? false,
             websiteCategory: p.websiteCategory ?? null,
             publicPortfolioImageUrl: p.publicPortfolioImageUrl ?? null,
+            publicPortfolioChallenge: p.publicPortfolioChallenge ?? null,
+            publicPortfolioSolution: p.publicPortfolioSolution ?? null,
             teamMembers: [],
             tasks: tasksForProject.map((t) => t.id),
             invoices: [],
@@ -401,6 +437,7 @@ export function Projects() {
     setFormData({
       name: '', description: '', customer: '', status: 'planning', priority: 'medium',
       projectManager: '', startDate: '', endDate: '', budget: '', publicPortfolioImageUrl: '',
+      publicPortfolioChallenge: '', publicPortfolioSolution: '',
     });
   };
 
@@ -415,6 +452,8 @@ export function Projects() {
       showOnPublicWebsite: false,
       websiteCategory: null as string | null,
       publicPortfolioImageUrl: formData.publicPortfolioImageUrl.trim() || undefined,
+      publicPortfolioChallenge: formData.publicPortfolioChallenge.trim() || undefined,
+      publicPortfolioSolution: formData.publicPortfolioSolution.trim() || undefined,
     };
 
     const res = await fetch(`${API_BASE}/api/projects`, {
@@ -437,6 +476,8 @@ export function Projects() {
       showOnPublicWebsite?: boolean;
       websiteCategory?: string | null;
       publicPortfolioImageUrl?: string | null;
+      publicPortfolioChallenge?: string | null;
+      publicPortfolioSolution?: string | null;
     } = await res.json();
 
     const newProject: Project = {
@@ -455,6 +496,8 @@ export function Projects() {
       showOnPublicWebsite: created.showOnPublicWebsite ?? false,
       websiteCategory: created.websiteCategory ?? null,
       publicPortfolioImageUrl: created.publicPortfolioImageUrl ?? null,
+      publicPortfolioChallenge: created.publicPortfolioChallenge ?? null,
+      publicPortfolioSolution: created.publicPortfolioSolution ?? null,
       teamMembers: [],
       tasks: [],
       invoices: [],
@@ -483,6 +526,8 @@ export function Projects() {
         showOnPublicWebsite: selectedProject.showOnPublicWebsite ?? false,
         websiteCategory: selectedProject.websiteCategory ?? null,
         publicPortfolioImageUrl: formData.publicPortfolioImageUrl.trim() || undefined,
+        publicPortfolioChallenge: formData.publicPortfolioChallenge.trim() || undefined,
+        publicPortfolioSolution: formData.publicPortfolioSolution.trim() || undefined,
       };
 
       const res = await fetch(`${API_BASE}/api/projects/${selectedProject.id}`, {
@@ -517,32 +562,48 @@ export function Projects() {
         showOnPublicWebsite?: boolean;
         websiteCategory?: string | null;
         publicPortfolioImageUrl?: string | null;
+        publicPortfolioChallenge?: string | null;
+        publicPortfolioSolution?: string | null;
       } = JSON.parse(text);
 
-      setProjects((prev) => prev.map((project) =>
-        project.id === selectedProject.id
-          ? {
-              ...project,
-              name: updated.name,
-              description: updated.description ?? '',
-              customer: toCustomerReference(String(updated.customerId), updated.customerName),
-              status: formData.status,
-              priority: formData.priority,
-              projectManager: users.find(u => u.id === formData.projectManager),
-              startDate: updated.startDateUtc,
-              endDate: updated.endDateUtc,
-              budget: updated.budget,
-              progress: Number(updated.progressPercent ?? project.progress ?? 0),
-              showOnPublicWebsite: updated.showOnPublicWebsite ?? project.showOnPublicWebsite,
-              websiteCategory: updated.websiteCategory ?? project.websiteCategory,
-              publicPortfolioImageUrl:
-                updated.publicPortfolioImageUrl !== undefined
-                  ? updated.publicPortfolioImageUrl ?? null
-                  : project.publicPortfolioImageUrl,
-              updatedAt: new Date().toISOString(),
-            }
-          : project
-      ));
+      setProjects((prev) => prev.map((project) => {
+        if (project.id !== selectedProject.id) return project;
+        const tasksForProject = projectTasks[project.id] ?? [];
+        const totalTasks = tasksForProject.length;
+        const completedTasks = tasksForProject.filter((t) => t.status === 'completed').length;
+        const taskBasedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        const storedPct = Number(updated.progressPercent ?? 0);
+        const progress =
+          storedPct > 0 ? Math.round(storedPct) : taskBasedProgress;
+        return {
+          ...project,
+          name: updated.name,
+          description: updated.description ?? '',
+          customer: toCustomerReference(String(updated.customerId), updated.customerName),
+          status: formData.status,
+          priority: formData.priority,
+          projectManager: users.find(u => u.id === formData.projectManager),
+          startDate: updated.startDateUtc,
+          endDate: updated.endDateUtc,
+          budget: updated.budget,
+          progress,
+          showOnPublicWebsite: updated.showOnPublicWebsite ?? project.showOnPublicWebsite,
+          websiteCategory: updated.websiteCategory ?? project.websiteCategory,
+          publicPortfolioImageUrl:
+            updated.publicPortfolioImageUrl !== undefined
+              ? updated.publicPortfolioImageUrl ?? null
+              : project.publicPortfolioImageUrl,
+          publicPortfolioChallenge:
+            updated.publicPortfolioChallenge !== undefined
+              ? updated.publicPortfolioChallenge ?? null
+              : project.publicPortfolioChallenge,
+          publicPortfolioSolution:
+            updated.publicPortfolioSolution !== undefined
+              ? updated.publicPortfolioSolution ?? null
+              : project.publicPortfolioSolution,
+          updatedAt: new Date().toISOString(),
+        };
+      }));
 
       setIsEditDialogOpen(false);
       setSelectedProject(null);
@@ -656,6 +717,8 @@ export function Projects() {
       startDate: project.startDate || '', endDate: project.endDate || '',
       budget: project.budget?.toString() || '',
       publicPortfolioImageUrl: project.publicPortfolioImageUrl ?? '',
+      publicPortfolioChallenge: project.publicPortfolioChallenge ?? '',
+      publicPortfolioSolution: project.publicPortfolioSolution ?? '',
     });
     setIsEditDialogOpen(true);
   };

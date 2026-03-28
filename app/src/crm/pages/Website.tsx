@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Layout, FileText, Image, MessageSquare, Settings, ExternalLink, Save, Plus, Eye, EyeOff, ArrowUp, ArrowDown, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
@@ -50,6 +51,8 @@ type CrmProjectForWebsite = {
   showOnPublicWebsite: boolean;
   websiteCategory: string | null;
   publicPortfolioImageUrl: string | null;
+  publicPortfolioChallenge: string | null;
+  publicPortfolioSolution: string | null;
 };
 
 export function Website() {
@@ -88,6 +91,8 @@ export function Website() {
         showOnPublicWebsite?: boolean;
         websiteCategory?: string | null;
         publicPortfolioImageUrl?: string | null;
+        publicPortfolioChallenge?: string | null;
+        publicPortfolioSolution?: string | null;
       }[] = await res.json();
       setCrmProjects(
         data.map((p) => ({
@@ -97,6 +102,8 @@ export function Website() {
           showOnPublicWebsite: p.showOnPublicWebsite ?? false,
           websiteCategory: p.websiteCategory ?? null,
           publicPortfolioImageUrl: p.publicPortfolioImageUrl ?? null,
+          publicPortfolioChallenge: p.publicPortfolioChallenge ?? null,
+          publicPortfolioSolution: p.publicPortfolioSolution ?? null,
         })),
       );
     } catch {
@@ -112,6 +119,8 @@ export function Website() {
       showOnPublicWebsite?: boolean;
       websiteCategory?: string | null;
       publicPortfolioImageUrl?: string | null;
+      publicPortfolioChallenge?: string | null;
+      publicPortfolioSolution?: string | null;
     },
   ) => {
     const res = await fetch(`${API_BASE}/api/projects/${id}/website`, {
@@ -127,6 +136,8 @@ export function Website() {
       showOnPublicWebsite?: boolean;
       websiteCategory?: string | null;
       publicPortfolioImageUrl?: string | null;
+      publicPortfolioChallenge?: string | null;
+      publicPortfolioSolution?: string | null;
     } = await res.json();
     setCrmProjects((prev) =>
       prev.map((p) =>
@@ -140,6 +151,14 @@ export function Website() {
                 updated.publicPortfolioImageUrl !== undefined
                   ? updated.publicPortfolioImageUrl ?? null
                   : p.publicPortfolioImageUrl,
+              publicPortfolioChallenge:
+                updated.publicPortfolioChallenge !== undefined
+                  ? updated.publicPortfolioChallenge ?? null
+                  : p.publicPortfolioChallenge,
+              publicPortfolioSolution:
+                updated.publicPortfolioSolution !== undefined
+                  ? updated.publicPortfolioSolution ?? null
+                  : p.publicPortfolioSolution,
             }
           : p,
       ),
@@ -738,6 +757,32 @@ export function Website() {
                               <Upload className="h-4 w-4" />
                             </Button>
                           </div>
+                          <Textarea
+                            placeholder="The Challenge (public case study)"
+                            className="min-h-[72px] text-sm resize-y"
+                            defaultValue={p.publicPortfolioChallenge ?? ''}
+                            key={`ch-${p.id}-${p.publicPortfolioChallenge ?? ''}`}
+                            onBlur={async (e) => {
+                              const next = e.target.value.trim() || null;
+                              const prev = p.publicPortfolioChallenge ?? null;
+                              if (next === prev) return;
+                              const ok = await patchProjectWebsite(p.id, { publicPortfolioChallenge: next });
+                              if (ok) toast.success('Challenge updated');
+                            }}
+                          />
+                          <Textarea
+                            placeholder="Our Solution (public case study)"
+                            className="min-h-[72px] text-sm resize-y"
+                            defaultValue={p.publicPortfolioSolution ?? ''}
+                            key={`sol-${p.id}-${p.publicPortfolioSolution ?? ''}`}
+                            onBlur={async (e) => {
+                              const next = e.target.value.trim() || null;
+                              const prev = p.publicPortfolioSolution ?? null;
+                              if (next === prev) return;
+                              const ok = await patchProjectWebsite(p.id, { publicPortfolioSolution: next });
+                              if (ok) toast.success('Solution updated');
+                            }}
+                          />
                         </div>
                         <Button
                           type="button"

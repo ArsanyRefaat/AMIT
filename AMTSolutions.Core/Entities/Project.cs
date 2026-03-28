@@ -19,5 +19,11 @@ public class Project : BaseEntity
 
     /// <summary>HTTPS URL for the image on the public portfolio / case study (host the file on your site or CDN).</summary>
     public string? PublicPortfolioImageUrl { get; set; }
+
+    /// <summary>Public case study: &quot;The Challenge&quot; section.</summary>
+    public string? PublicPortfolioChallenge { get; set; }
+
+    /// <summary>Public case study: &quot;Our Solution&quot; section.</summary>
+    public string? PublicPortfolioSolution { get; set; }
 }
 
