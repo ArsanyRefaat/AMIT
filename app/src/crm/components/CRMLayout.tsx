@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -258,46 +258,6 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
       new Date(a.source === 'crm' ? a.item.createdAtUtc : a.msg.createdAtUtc).getTime() -
       new Date(b.source === 'crm' ? b.item.createdAtUtc : b.msg.createdAtUtc).getTime()
   );
-
-  const seenContactIdsRef = useRef<Set<string> | null>(null);
-  const seenCrmBellIdsRef = useRef<Set<string> | null>(null);
-
-  useEffect(() => {
-    if (contactMessages.length === 0) {
-      if (seenContactIdsRef.current === null) seenContactIdsRef.current = new Set();
-    } else {
-      const currentIds = new Set(contactMessages.map((m) => m.id));
-      if (seenContactIdsRef.current === null) {
-        seenContactIdsRef.current = currentIds;
-      } else {
-        for (const m of contactMessages) {
-          if (seenContactIdsRef.current.has(m.id)) continue;
-          if (m.status === 'pending') {
-            toast.info(`Website inquiry — add to leads from the bell: ${m.name}`);
-          }
-        }
-        seenContactIdsRef.current = currentIds;
-      }
-    }
-  }, [contactMessages]);
-
-  useEffect(() => {
-    if (crmBellItems.length === 0) {
-      if (seenCrmBellIdsRef.current === null) seenCrmBellIdsRef.current = new Set();
-      return;
-    }
-    const currentIds = new Set(crmBellItems.map((n) => n.id));
-    if (seenCrmBellIdsRef.current === null) {
-      seenCrmBellIdsRef.current = currentIds;
-      return;
-    }
-    for (const n of crmBellItems) {
-      if (seenCrmBellIdsRef.current.has(n.id)) continue;
-      const sub = n.subtitle ? ` — ${n.subtitle}` : '';
-      toast.info(`${n.title}${sub}`);
-    }
-    seenCrmBellIdsRef.current = currentIds;
-  }, [crmBellItems]);
 
   const navigateForBellKind = (kind: string) => {
     if (kind === 'lead_assigned' || kind === 'website_lead') onNavigate('leads');

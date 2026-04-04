@@ -12,7 +12,6 @@ import { Reports } from './pages/Reports';
 import { RolesPage } from './pages/Roles';
 import { Website } from './pages/Website';
 import { Settings } from './pages/Settings';
-import { Toaster } from '@/components/ui/sonner';
 
 type AppView = 'entry' | 'website' | 'crm';
 
@@ -56,7 +55,6 @@ export function CRMApp({ onNavigate, onLogout }: CRMAppProps) {
       {currentPage === 'roles' && <RolesPage />}
       {currentPage === 'website' && <Website />}
       {currentPage === 'settings' && <Settings />}
-      <Toaster position="bottom-right" />
     </CRMLayout>
   );
 }
