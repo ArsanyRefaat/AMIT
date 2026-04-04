@@ -18,7 +18,7 @@ public sealed class LeadService : ILeadService
     {
         return await _db.Leads
             .AsNoTracking()
-            .Select(x => new LeadDto(x.Id, x.Name, x.Email, x.Phone, x.Company, x.Source, x.Stage))
+            .Select(x => new LeadDto(x.Id, x.Name, x.Email, x.Phone, x.Company, x.Source, x.Stage, x.AssignedStaffUserId))
             .ToListAsync(cancellationToken);
     }
 
@@ -27,7 +27,7 @@ public sealed class LeadService : ILeadService
         var lead = await _db.Leads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         return lead is null
             ? null
-            : new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage);
+            : new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage, lead.AssignedStaffUserId);
     }
 
     public async Task<LeadDto> CreateAsync(CreateLeadRequest request, CancellationToken cancellationToken = default)
@@ -38,13 +38,16 @@ public sealed class LeadService : ILeadService
             Email = request.Email,
             Phone = request.Phone,
             Company = request.Company,
-            Source = request.Source
+            Source = request.Source,
+            AssignedStaffUserId = string.IsNullOrWhiteSpace(request.AssignedStaffUserId)
+                ? null
+                : request.AssignedStaffUserId.Trim()
         };
 
         _db.Leads.Add(lead);
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage);
+        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage, lead.AssignedStaffUserId);
     }
 
     public async Task<LeadDto?> UpdateAsync(int id, UpdateLeadRequest request, CancellationToken cancellationToken = default)
@@ -61,10 +64,13 @@ public sealed class LeadService : ILeadService
         lead.Company = request.Company;
         lead.Source = request.Source;
         lead.Stage = request.Stage;
+        lead.AssignedStaffUserId = string.IsNullOrWhiteSpace(request.AssignedStaffUserId)
+            ? null
+            : request.AssignedStaffUserId.Trim();
         lead.UpdatedAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage);
+        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage, lead.AssignedStaffUserId);
     }
 
     public async Task<LeadDto?> UpdateStageAsync(int id, UpdateLeadStageRequest request, CancellationToken cancellationToken = default)
@@ -79,7 +85,7 @@ public sealed class LeadService : ILeadService
         lead.UpdatedAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage);
+        return new LeadDto(lead.Id, lead.Name, lead.Email, lead.Phone, lead.Company, lead.Source, lead.Stage, lead.AssignedStaffUserId);
     }
 
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
@@ -95,4 +101,3 @@ public sealed class LeadService : ILeadService
         return true;
     }
 }
-

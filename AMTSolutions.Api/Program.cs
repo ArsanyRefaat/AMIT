@@ -431,7 +431,45 @@ var securitySettingsStore = new SecuritySettingsDto(
 // Simple in-memory contact messages coming from the public website contact form
 var contactMessagesStore = new List<ContactMessageDto>();
 
+// CRM bell: in-memory notifications driven by Settings → Notifications toggles
+var crmBellNotificationsLock = new object();
+var crmBellNotifications = new List<CrmBellNotificationDto>();
+
 var app = builder.Build();
+
+void TryPushCrmBellNotification(
+    string type,
+    string stableId,
+    string title,
+    string? subtitle,
+    string? targetUserId,
+    int? relatedId = null)
+{
+    var s = notificationSettingsStore;
+    var enabled = type switch
+    {
+        "lead_assigned" or "website_lead" => s.NewLeadAssigned,
+        "task_due" => s.TaskDueSoon,
+        "invoice_paid" => s.InvoicePaid,
+        "project_update" => s.ProjectUpdates,
+        _ => false
+    };
+    if (!enabled)
+    {
+        return;
+    }
+
+    var entry = new CrmBellNotificationDto(stableId, type, title, subtitle, targetUserId, DateTime.UtcNow, relatedId);
+    lock (crmBellNotificationsLock)
+    {
+        crmBellNotifications.RemoveAll(n => string.Equals(n.Id, stableId, StringComparison.Ordinal));
+        crmBellNotifications.Insert(0, entry);
+        while (crmBellNotifications.Count > 250)
+        {
+            crmBellNotifications.RemoveAt(crmBellNotifications.Count - 1);
+        }
+    }
+}
 
 // Seed Identity roles/users and ensure CompanySettings row/table exist
 using (var scope = app.Services.CreateScope())
@@ -601,13 +639,41 @@ app.MapGet("/api/leads/{id:int}", async (int id, ILeadService service, Cancellat
 app.MapPost("/api/leads", async (CreateLeadRequest request, ILeadService service, CancellationToken ct) =>
 {
     var created = await service.CreateAsync(request, ct);
+    if (!string.IsNullOrWhiteSpace(created.AssignedStaffUserId))
+    {
+        TryPushCrmBellNotification(
+            "lead_assigned",
+            $"lead-assign-{created.Id}-{created.AssignedStaffUserId}",
+            "Lead assigned to you",
+            created.Name,
+            created.AssignedStaffUserId,
+            created.Id);
+    }
     return Results.Created($"/api/leads/{created.Id}", created);
 });
 
-app.MapPut("/api/leads/{id:int}", async (int id, UpdateLeadRequest request, ILeadService service, CancellationToken ct) =>
+app.MapPut("/api/leads/{id:int}", async (int id, UpdateLeadRequest request, ILeadService service, AmtsDbContext db, CancellationToken ct) =>
 {
+    var before = await db.Leads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+    var oldAssign = before?.AssignedStaffUserId;
     var updated = await service.UpdateAsync(id, request, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    if (updated is null)
+    {
+        return Results.NotFound();
+    }
+    var newAssign = updated.AssignedStaffUserId;
+    if (!string.IsNullOrWhiteSpace(newAssign) &&
+        !string.Equals(oldAssign, newAssign, StringComparison.Ordinal))
+    {
+        TryPushCrmBellNotification(
+            "lead_assigned",
+            $"lead-assign-{id}-{newAssign}",
+            "Lead assigned to you",
+            updated.Name,
+            newAssign,
+            id);
+    }
+    return Results.Ok(updated);
 });
 
 app.MapPatch("/api/leads/{id:int}/stage", async (int id, UpdateLeadStageRequest request, ILeadService service, CancellationToken ct) =>
@@ -621,6 +687,56 @@ app.MapDelete("/api/leads/{id:int}", async (int id, ILeadService service, Cancel
     var deleted = await service.DeleteAsync(id, ct);
     return deleted ? Results.NoContent() : Results.NotFound();
 });
+
+app.MapGet("/api/crm-bell-notifications", async (ClaimsPrincipal user, AmtsDbContext db, CancellationToken ct) =>
+{
+    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrEmpty(userId))
+    {
+        return Results.Json(new { error = "Unauthorized." }, statusCode: 401);
+    }
+
+    var items = new List<CrmBellNotificationJson>();
+
+    lock (crmBellNotificationsLock)
+    {
+        foreach (var n in crmBellNotifications
+                     .Where(n => n.TargetUserId == null || string.Equals(n.TargetUserId, userId, StringComparison.Ordinal))
+                     .OrderByDescending(n => n.CreatedAtUtc)
+                     .Take(100))
+        {
+            items.Add(new CrmBellNotificationJson(n.Id, n.Type, n.Title, n.Subtitle, n.CreatedAtUtc, n.RelatedId));
+        }
+    }
+
+    if (notificationSettingsStore.TaskDueSoon)
+    {
+        var dueBefore = DateTime.UtcNow.AddHours(24);
+        var dueTasks = await db.Tasks.AsNoTracking()
+            .Where(t => t.AssignedToUserId == userId
+                        && t.DueDateUtc != null
+                        && t.DueDateUtc >= DateTime.UtcNow
+                        && t.DueDateUtc <= dueBefore
+                        && t.Status != AMTSolutions.Core.Enums.TaskStatus.Completed)
+            .OrderBy(t => t.DueDateUtc)
+            .Take(25)
+            .Select(t => new { t.Id, t.Title, t.DueDateUtc })
+            .ToListAsync(ct);
+
+        foreach (var t in dueTasks)
+        {
+            items.Add(new CrmBellNotificationJson(
+                $"task-due-{t.Id}",
+                "task_due",
+                "Task due soon",
+                $"{t.Title} — due {t.DueDateUtc:MMM d, HH:mm} UTC",
+                DateTime.UtcNow,
+                t.Id));
+        }
+    }
+
+    return Results.Ok(items);
+}).RequireAuthorization();
 
 // Website contact messages (from public Contact form)
 app.MapGet("/api/contact-messages", () =>
@@ -680,6 +796,16 @@ app.MapPost("/api/contact-messages", async (CreateContactMessageRequest request,
     );
 
     contactMessagesStore.Add(msg);
+    if (leadId.HasValue && string.Equals(status, "accepted", StringComparison.OrdinalIgnoreCase))
+    {
+        TryPushCrmBellNotification(
+            "website_lead",
+            $"website-lead-{msg.Id}",
+            "New lead from website",
+            name,
+            targetUserId: null,
+            leadId.Value);
+    }
     return Results.Created($"/api/contact-messages/{msg.Id}", msg);
 });
 
@@ -857,10 +983,29 @@ app.MapPost("/api/projects", async (CreateProjectRequest request, IProjectServic
     return Results.Created($"/api/projects/{created.Id}", created);
 });
 
-app.MapPut("/api/projects/{id:int}", async (int id, CreateProjectRequest request, IProjectService service, CancellationToken ct) =>
+app.MapPut("/api/projects/{id:int}", async (int id, CreateProjectRequest request, IProjectService service, AmtsDbContext db, CancellationToken ct) =>
 {
+    var before = await db.Projects.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
     var updated = await service.UpdateAsync(id, request, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    if (updated is null)
+    {
+        return Results.NotFound();
+    }
+    var changed = before is null
+        || before.Name != updated.Name
+        || before.ProgressPercent != updated.ProgressPercent
+        || before.Budget != updated.Budget;
+    if (changed)
+    {
+        TryPushCrmBellNotification(
+            "project_update",
+            $"project-update-{id}-{DateTime.UtcNow.Ticks}",
+            "Project updated",
+            updated.Name,
+            targetUserId: null,
+            id);
+    }
+    return Results.Ok(updated);
 });
 
 app.MapDelete("/api/projects/{id:int}", async (int id, IProjectService service, CancellationToken ct) =>
@@ -992,10 +1137,27 @@ app.MapPost("/api/invoices", async (CreateInvoiceRequest request, IInvoiceServic
     }
 });
 
-app.MapPatch("/api/invoices/{id:int}/status", async (int id, UpdateInvoiceStatusRequest request, IInvoiceService service, CancellationToken ct) =>
+app.MapPatch("/api/invoices/{id:int}/status", async (int id, UpdateInvoiceStatusRequest request, IInvoiceService service, AmtsDbContext db, CancellationToken ct) =>
 {
+    var invBefore = await db.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == id, ct);
+    var prevStatus = invBefore?.Status;
     var updated = await service.UpdateStatusAsync(id, request, ct);
-    return updated is null ? Results.NotFound() : Results.Ok(updated);
+    if (updated is null)
+    {
+        return Results.NotFound();
+    }
+    if (request.Status == AMTSolutions.Core.Enums.InvoiceStatus.Paid &&
+        prevStatus != AMTSolutions.Core.Enums.InvoiceStatus.Paid)
+    {
+        TryPushCrmBellNotification(
+            "invoice_paid",
+            $"invoice-paid-{id}-{DateTime.UtcNow.Ticks}",
+            "Invoice paid",
+            $"{updated.InvoiceNumber} — {updated.CustomerName}",
+            targetUserId: null,
+            id);
+    }
+    return Results.Ok(updated);
 });
 
 app.MapDelete("/api/invoices/{id:int}", async (int id, IInvoiceService service, CancellationToken ct) =>
@@ -2008,6 +2170,26 @@ public sealed record WebsiteTestimonialDto(
     int Rating,
     int Order,
     bool IsActive
+);
+
+public sealed record CrmBellNotificationDto(
+    string Id,
+    string Type,
+    string Title,
+    string? Subtitle,
+    string? TargetUserId,
+    DateTime CreatedAtUtc,
+    int? RelatedId
+);
+
+/// <summary>API shape for GET /api/crm-bell-notifications (includes computed task reminders).</summary>
+public sealed record CrmBellNotificationJson(
+    string Id,
+    string Kind,
+    string Title,
+    string? Subtitle,
+    DateTime CreatedAtUtc,
+    int? RelatedId
 );
 
 public sealed record ContactMessageDto(

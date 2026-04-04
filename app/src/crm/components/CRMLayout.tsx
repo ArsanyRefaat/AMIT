@@ -107,6 +107,9 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
     }[]
   >([]);
   const [dismissedBellIds, setDismissedBellIds] = useState<Set<string>>(loadDismissedBellIds);
+  const [crmBellItems, setCrmBellItems] = useState<
+    { id: string; kind: string; title: string; subtitle?: string | null; createdAtUtc: string; relatedId?: number | null }[]
+  >([]);
   const [profileName, setProfileName] = useState('Amr Mohamed');
   const [profileInitials, setProfileInitials] = useState('AM');
   const [roleName, setRoleName] = useState('Super Admin');
@@ -114,20 +117,27 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
 
   const fetchNavCounts = useCallback(async () => {
     try {
-      const [leadRes, taskRes, contactRes] = await Promise.all([
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const authHeaders: Record<string, string> = {};
+      if (token) authHeaders.Authorization = `Bearer ${token}`;
+
+      const [leadRes, taskRes, contactRes, bellRes] = await Promise.all([
         fetch(`${API_BASE}/api/leads`),
         fetch(`${API_BASE}/api/tasks`),
         fetch(`${API_BASE}/api/contact-messages`),
+        fetch(`${API_BASE}/api/crm-bell-notifications`, { headers: authHeaders, cache: 'no-store' }),
       ]);
       const toJson = (r: Response) => (r.ok ? r.json() : Promise.resolve([]));
-      const [leadData, taskData, contactData] = await Promise.all([
+      const [leadData, taskData, contactData, bellData] = await Promise.all([
         toJson(leadRes),
         toJson(taskRes),
         toJson(contactRes),
+        bellRes.ok ? bellRes.json() : Promise.resolve([]),
       ]);
       const leads = Array.isArray(leadData) ? leadData : leadData?.value ?? [];
       const tasks = Array.isArray(taskData) ? taskData : taskData?.value ?? [];
       const contacts = Array.isArray(contactData) ? contactData : contactData?.value ?? [];
+      const bellArr = Array.isArray(bellData) ? bellData : bellData?.value ?? [];
       setLeadsCount(leads.length);
       setTasksCount(tasks.length);
       setContactMessages(
@@ -140,6 +150,16 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
           status: c.status,
           createdAtUtc: c.createdAtUtc,
           leadId: c.leadId ?? null,
+        }))
+      );
+      setCrmBellItems(
+        bellArr.map((n: any) => ({
+          id: String(n.id),
+          kind: String(n.kind ?? ''),
+          title: String(n.title ?? ''),
+          subtitle: n.subtitle ?? null,
+          createdAtUtc: String(n.createdAtUtc ?? ''),
+          relatedId: n.relatedId ?? null,
         }))
       );
     } catch {
@@ -220,35 +240,71 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
 
   const visibleAdminItems = adminItems.filter((item) => canViewPage(item.id));
 
-  const websiteBellNotifications = contactMessages
-    .filter(
-      (m) =>
-        (m.status === 'pending' || m.status === 'accepted') && !dismissedBellIds.has(m.id)
-    )
-    .sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+  const websitePendingBell = contactMessages.filter(
+    (m) => m.status === 'pending' && !dismissedBellIds.has(m.id)
+  );
+
+  const crmBellVisible = crmBellItems.filter((n) => !dismissedBellIds.has(n.id));
+
+  type BellRow =
+    | { key: string; source: 'website'; msg: (typeof contactMessages)[0] }
+    | { key: string; source: 'crm'; item: (typeof crmBellItems)[0] };
+
+  const allBellRows: BellRow[] = [
+    ...crmBellVisible.map((item) => ({ key: `crm-${item.id}`, source: 'crm' as const, item })),
+    ...websitePendingBell.map((msg) => ({ key: `web-${msg.id}`, source: 'website' as const, msg })),
+  ].sort(
+    (a, b) =>
+      new Date(a.source === 'crm' ? a.item.createdAtUtc : a.msg.createdAtUtc).getTime() -
+      new Date(b.source === 'crm' ? b.item.createdAtUtc : b.msg.createdAtUtc).getTime()
+  );
 
   const seenContactIdsRef = useRef<Set<string> | null>(null);
+  const seenCrmBellIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (contactMessages.length === 0) {
       if (seenContactIdsRef.current === null) seenContactIdsRef.current = new Set();
-      return;
-    }
-    const currentIds = new Set(contactMessages.map((m) => m.id));
-    if (seenContactIdsRef.current === null) {
-      seenContactIdsRef.current = currentIds;
-      return;
-    }
-    for (const m of contactMessages) {
-      if (seenContactIdsRef.current.has(m.id)) continue;
-      if (m.status === 'accepted') {
-        toast.success(`New website lead: ${m.name}`);
-      } else if (m.status === 'pending') {
-        toast.info(`Website inquiry — add to leads from the bell: ${m.name}`);
+    } else {
+      const currentIds = new Set(contactMessages.map((m) => m.id));
+      if (seenContactIdsRef.current === null) {
+        seenContactIdsRef.current = currentIds;
+      } else {
+        for (const m of contactMessages) {
+          if (seenContactIdsRef.current.has(m.id)) continue;
+          if (m.status === 'pending') {
+            toast.info(`Website inquiry — add to leads from the bell: ${m.name}`);
+          }
+        }
+        seenContactIdsRef.current = currentIds;
       }
     }
-    seenContactIdsRef.current = currentIds;
   }, [contactMessages]);
+
+  useEffect(() => {
+    if (crmBellItems.length === 0) {
+      if (seenCrmBellIdsRef.current === null) seenCrmBellIdsRef.current = new Set();
+      return;
+    }
+    const currentIds = new Set(crmBellItems.map((n) => n.id));
+    if (seenCrmBellIdsRef.current === null) {
+      seenCrmBellIdsRef.current = currentIds;
+      return;
+    }
+    for (const n of crmBellItems) {
+      if (seenCrmBellIdsRef.current.has(n.id)) continue;
+      const sub = n.subtitle ? ` — ${n.subtitle}` : '';
+      toast.info(`${n.title}${sub}`);
+    }
+    seenCrmBellIdsRef.current = currentIds;
+  }, [crmBellItems]);
+
+  const navigateForBellKind = (kind: string) => {
+    if (kind === 'lead_assigned' || kind === 'website_lead') onNavigate('leads');
+    else if (kind === 'task_due') onNavigate('tasks');
+    else if (kind === 'invoice_paid') onNavigate('invoices');
+    else if (kind === 'project_update') onNavigate('projects');
+  };
 
   const dismissBellNotification = (id: string) => {
     setDismissedBellIds((prev) => {
@@ -506,63 +562,78 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
               <DropdownMenuTrigger asChild>
                 <button className="relative p-2 hover:bg-gray-100 rounded-xl">
                   <Bell className="w-5 h-5 text-gray-600" />
-                  {websiteBellNotifications.length > 0 && (
+                  {allBellRows.length > 0 && (
                     <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#C9A962] rounded-full" />
                   )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Website leads</DropdownMenuLabel>
-                <p className="px-2 pb-2 text-xs text-gray-500">
-                  Submissions are added to Leads automatically. Clear items here when you&apos;ve seen them.
-                </p>
+                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {websiteBellNotifications.length === 0 ? (
+                {allBellRows.length === 0 ? (
                   <div className="px-3 py-2 text-sm text-gray-500">No new notifications.</div>
                 ) : (
-                  websiteBellNotifications.slice(0, 8).map((msg) => (
-                    <div
-                      key={msg.id}
-                      className="flex items-start gap-2 px-2 py-2 border-b last:border-b-0 border-gray-100"
-                    >
-                      <button
-                        type="button"
-                        className="flex-1 min-w-0 text-left rounded-md hover:bg-gray-50 px-1 py-0.5 -mx-1"
-                        onClick={() => {
-                          if (msg.status === 'accepted') onNavigate('leads');
-                        }}
+                  allBellRows.slice(0, 12).map((row) =>
+                    row.source === 'crm' ? (
+                      <div
+                        key={row.key}
+                        className="flex items-start gap-2 px-2 py-2 border-b last:border-b-0 border-gray-100"
                       >
-                        <p className="text-sm font-medium text-black">
-                          {msg.status === 'accepted'
-                            ? 'New website lead'
-                            : "Couldn't auto-add — tap Add to leads"}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {msg.name} · {msg.email}
-                        </p>
-                      </button>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {msg.status === 'pending' && (
+                        <button
+                          type="button"
+                          className="flex-1 min-w-0 text-left rounded-md hover:bg-gray-50 px-1 py-0.5 -mx-1"
+                          onClick={() => navigateForBellKind(row.item.kind)}
+                        >
+                          <p className="text-sm font-medium text-black">{row.item.title}</p>
+                          {row.item.subtitle ? (
+                            <p className="text-xs text-gray-500 truncate">{row.item.subtitle}</p>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 shrink-0"
+                          aria-label="Dismiss notification"
+                          onClick={() => dismissBellNotification(row.item.id)}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        key={row.key}
+                        className="flex items-start gap-2 px-2 py-2 border-b last:border-b-0 border-gray-100"
+                      >
+                        <button
+                          type="button"
+                          className="flex-1 min-w-0 text-left rounded-md hover:bg-gray-50 px-1 py-0.5 -mx-1"
+                          onClick={() => onNavigate('leads')}
+                        >
+                          <p className="text-sm font-medium text-black">Website inquiry</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {row.msg.name} · {row.msg.email}
+                          </p>
+                        </button>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
                           <button
                             type="button"
                             className="text-[10px] px-2 py-1 rounded-md bg-black text-white hover:bg-gray-900"
                             onClick={async () => {
                               try {
                                 const res = await fetch(
-                                  `${API_BASE}/api/contact-messages/${msg.id}/accept`,
+                                  `${API_BASE}/api/contact-messages/${row.msg.id}/accept`,
                                   { method: 'POST' }
                                 );
                                 if (!res.ok) return;
                                 const data = (await res.json()) as { leadId?: number };
                                 setContactMessages((prev) =>
                                   prev.map((m) =>
-                                    m.id === msg.id
+                                    m.id === row.msg.id
                                       ? { ...m, status: 'accepted', leadId: data.leadId ?? m.leadId }
                                       : m
                                   )
                                 );
                                 fetchNavCounts();
-                                toast.success(`Lead created: ${msg.name}`);
+                                toast.success(`Lead created: ${row.msg.name}`);
                               } catch {
                                 // ignore
                               }
@@ -570,18 +641,18 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
                           >
                             Add to leads
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                          aria-label="Dismiss notification"
-                          onClick={() => dismissBellNotification(msg.id)}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                          <button
+                            type="button"
+                            className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                            aria-label="Dismiss notification"
+                            onClick={() => dismissBellNotification(row.msg.id)}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    )
+                  )
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

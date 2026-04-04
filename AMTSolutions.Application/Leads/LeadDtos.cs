@@ -9,7 +9,8 @@ public sealed record LeadDto(
     string? Phone,
     string? Company,
     string? Source,
-    LeadStage Stage
+    LeadStage Stage,
+    string? AssignedStaffUserId = null
 );
 
 public sealed record CreateLeadRequest(
@@ -18,7 +19,8 @@ public sealed record CreateLeadRequest(
     string? Phone,
     string? Company,
     string? Source,
-    string? Notes
+    string? Notes,
+    string? AssignedStaffUserId = null
 );
 
 public sealed record UpdateLeadStageRequest(
@@ -33,6 +35,7 @@ public sealed record UpdateLeadRequest(
     string? Company,
     string? Source,
     LeadStage Stage,
-    string? Notes
+    string? Notes,
+    string? AssignedStaffUserId = null
 );
 

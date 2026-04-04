@@ -20,9 +20,22 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { motion } from 'framer-motion';
-import { users } from '@/data/mockData';
-import type { Lead, LeadStatus } from '@/types';
+import type { Lead, LeadStatus, User as CrmUser } from '@/types';
 import { API_BASE } from '@/lib/api';
+
+type StaffUser = { id: string; firstName: string; lastName: string; email: string };
+
+function staffToLeadUser(s: StaffUser): CrmUser {
+  return {
+    id: s.id,
+    email: s.email,
+    firstName: s.firstName,
+    lastName: s.lastName,
+    role: 'sales_rep',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  };
+}
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
@@ -69,9 +82,11 @@ type LeadFormData = {
 function LeadForm({
   formData,
   setFormData,
+  staffUsers,
 }: {
   formData: LeadFormData;
   setFormData: Dispatch<SetStateAction<LeadFormData>>;
+  staffUsers: StaffUser[];
 }) {
   return (
     <div className="space-y-4">
@@ -182,7 +197,7 @@ function LeadForm({
             <SelectValue placeholder="Select user" />
           </SelectTrigger>
           <SelectContent>
-            {users.map((user) => (
+            {staffUsers.map((user) => (
               <SelectItem key={user.id} value={user.id}>
                 {user.firstName} {user.lastName}
               </SelectItem>
@@ -232,6 +247,7 @@ type ApiLead = {
   company?: string;
   source?: string;
   stage: number;
+  assignedStaffUserId?: string | null;
 };
 
 const stageToStatus: Record<number, LeadStatus> = {
@@ -255,6 +271,7 @@ const statusToStage: Record<LeadStatus, number> = {
 };
 
 export function Leads() {
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -283,11 +300,27 @@ export function Leads() {
   });
 
   useEffect(() => {
-    const loadLeads = async () => {
+    const load = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/leads`);
-        if (!res.ok) return;
-        const data: ApiLead[] = await res.json();
+        const [usersRes, leadsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/users`),
+          fetch(`${API_BASE}/api/leads`),
+        ]);
+        let staffList: StaffUser[] = [];
+        if (usersRes.ok) {
+          const udata = await usersRes.json();
+          if (Array.isArray(udata)) {
+            staffList = udata.map((u: { id: string; firstName?: string; lastName?: string; email?: string }) => ({
+              id: u.id,
+              firstName: u.firstName ?? '',
+              lastName: u.lastName ?? '',
+              email: u.email ?? '',
+            }));
+          }
+        }
+        setStaffUsers(staffList);
+        if (!leadsRes.ok) return;
+        const data: ApiLead[] = await leadsRes.json();
         const mapped: Lead[] = data.map((l) => ({
           id: String(l.id),
           firstName: l.name,
@@ -299,7 +332,12 @@ export function Leads() {
           source: l.source ?? '',
           status: stageToStatus[l.stage] ?? 'new',
           priority: 'medium',
-          assignedTo: undefined,
+          assignedTo: (() => {
+            const su = l.assignedStaffUserId
+              ? staffList.find((u) => u.id === l.assignedStaffUserId)
+              : undefined;
+            return su ? staffToLeadUser(su) : undefined;
+          })(),
           notes: [],
           activities: [],
           estimatedValue: undefined,
@@ -310,11 +348,11 @@ export function Leads() {
         }));
         setLeads(mapped);
       } catch {
-        // ignore for now, fall back to mock data
+        // ignore
       }
     };
 
-    loadLeads();
+    void load();
   }, []);
 
   const filteredLeads = leads.filter((lead) => {
@@ -342,6 +380,7 @@ export function Leads() {
       company: formData.company || undefined,
       source: formData.source || undefined,
       notes: formData.notes || undefined,
+      assignedStaffUserId: formData.assignedTo || undefined,
     };
 
     try {
@@ -366,7 +405,10 @@ export function Leads() {
         jobTitle: '',
         status: 'new',
         priority: formData.priority,
-        assignedTo: users.find(u => u.id === formData.assignedTo),
+        assignedTo: (() => {
+          const su = staffUsers.find((u) => u.id === formData.assignedTo);
+          return su ? staffToLeadUser(su) : undefined;
+        })(),
         source: created.source ?? '',
         estimatedValue: formData.estimatedValue ? Number(formData.estimatedValue) : undefined,
         notes: [],
@@ -400,6 +442,7 @@ export function Leads() {
           source: formData.source || null,
           stage: statusToStage[formData.status],
           notes: formData.notes || null,
+          assignedStaffUserId: formData.assignedTo || null,
         }),
       });
 
@@ -420,7 +463,10 @@ export function Leads() {
               jobTitle: formData.jobTitle,
               status: formData.status,
               priority: formData.priority,
-              assignedTo: users.find(u => u.id === formData.assignedTo),
+              assignedTo: (() => {
+                const su = staffUsers.find((u) => u.id === formData.assignedTo);
+                return su ? staffToLeadUser(su) : undefined;
+              })(),
               source: formData.source,
               estimatedValue: formData.estimatedValue ? Number(formData.estimatedValue) : undefined,
               updatedAt: new Date().toISOString(),
@@ -716,7 +762,7 @@ export function Leads() {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add New Lead</DialogTitle></DialogHeader>
-          <LeadForm formData={formData} setFormData={setFormData} />
+          <LeadForm formData={formData} setFormData={setFormData} staffUsers={staffUsers} />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button onClick={handleCreate} className="bg-black hover:bg-gray-800 text-white">Add Lead</Button>
@@ -728,7 +774,7 @@ export function Leads() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Lead</DialogTitle></DialogHeader>
-          <LeadForm formData={formData} setFormData={setFormData} />
+          <LeadForm formData={formData} setFormData={setFormData} staffUsers={staffUsers} />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
             <Button onClick={handleEdit} className="bg-black hover:bg-gray-800 text-white">Save Changes</Button>
