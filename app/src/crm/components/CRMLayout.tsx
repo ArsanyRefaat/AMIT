@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -31,6 +31,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { API_BASE } from '@/lib/api';
+import { toast } from 'sonner';
+
+const WEBSITE_BELL_DISMISSED_KEY = 'crmWebsiteContactDismissedIds';
+
+function loadDismissedBellIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(WEBSITE_BELL_DISMISSED_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
 
 export type CRMPage = 'dashboard' | 'leads' | 'customers' | 'products' | 'projects' | 'tasks' | 'invoices' | 'expenses' | 'reports' | 'roles' | 'website' | 'settings';
 
@@ -81,8 +95,18 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
   const [leadsCount, setLeadsCount] = useState<number>(0);
   const [tasksCount, setTasksCount] = useState<number>(0);
   const [contactMessages, setContactMessages] = useState<
-    { id: string; name: string; email: string; company?: string | null; message: string; status: string; createdAtUtc: string }[]
+    {
+      id: string;
+      name: string;
+      email: string;
+      company?: string | null;
+      message: string;
+      status: string;
+      createdAtUtc: string;
+      leadId?: number | null;
+    }[]
   >([]);
+  const [dismissedBellIds, setDismissedBellIds] = useState<Set<string>>(loadDismissedBellIds);
   const [profileName, setProfileName] = useState('Amr Mohamed');
   const [profileInitials, setProfileInitials] = useState('AM');
   const [roleName, setRoleName] = useState('Super Admin');
@@ -115,6 +139,7 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
           message: c.message,
           status: c.status,
           createdAtUtc: c.createdAtUtc,
+          leadId: c.leadId ?? null,
         }))
       );
     } catch {
@@ -195,7 +220,48 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
 
   const visibleAdminItems = adminItems.filter((item) => canViewPage(item.id));
 
-  const pendingMessages = contactMessages.filter((m) => m.status === 'pending');
+  const websiteBellNotifications = contactMessages
+    .filter(
+      (m) =>
+        (m.status === 'pending' || m.status === 'accepted') && !dismissedBellIds.has(m.id)
+    )
+    .sort((a, b) => new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime());
+
+  const seenContactIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (contactMessages.length === 0) {
+      if (seenContactIdsRef.current === null) seenContactIdsRef.current = new Set();
+      return;
+    }
+    const currentIds = new Set(contactMessages.map((m) => m.id));
+    if (seenContactIdsRef.current === null) {
+      seenContactIdsRef.current = currentIds;
+      return;
+    }
+    for (const m of contactMessages) {
+      if (seenContactIdsRef.current.has(m.id)) continue;
+      if (m.status === 'accepted') {
+        toast.success(`New website lead: ${m.name}`);
+      } else if (m.status === 'pending') {
+        toast.info(`Website inquiry — add to leads from the bell: ${m.name}`);
+      }
+    }
+    seenContactIdsRef.current = currentIds;
+  }, [contactMessages]);
+
+  const dismissBellNotification = (id: string) => {
+    setDismissedBellIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem(WEBSITE_BELL_DISMISSED_KEY, JSON.stringify([...next]));
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const authEmail = (localStorage.getItem('authEmail') ?? '').trim().toLowerCase();
@@ -440,75 +506,78 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
               <DropdownMenuTrigger asChild>
                 <button className="relative p-2 hover:bg-gray-100 rounded-xl">
                   <Bell className="w-5 h-5 text-gray-600" />
-                  {pendingMessages.length > 0 && (
+                  {websiteBellNotifications.length > 0 && (
                     <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#C9A962] rounded-full" />
                   )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Website Messages</DropdownMenuLabel>
+                <DropdownMenuLabel>Website leads</DropdownMenuLabel>
+                <p className="px-2 pb-2 text-xs text-gray-500">
+                  Submissions are added to Leads automatically. Clear items here when you&apos;ve seen them.
+                </p>
                 <DropdownMenuSeparator />
-                {pendingMessages.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-gray-500">No new website messages.</div>
+                {websiteBellNotifications.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">No new notifications.</div>
                 ) : (
-                  pendingMessages.slice(0, 5).map((msg) => (
-                    <div key={msg.id} className="px-3 py-2 border-b last:border-b-0 border-gray-100">
-                      <div className="text-sm font-medium text-black">
-                        {msg.name} <span className="text-gray-500 text-xs">({msg.email})</span>
-                      </div>
-                      {msg.company && (
-                        <div className="text-xs text-gray-500 mb-1">{msg.company}</div>
-                      )}
-                      <div className="text-xs text-gray-600 line-clamp-2 mb-2">{msg.message}</div>
-                      <div className="flex gap-2">
-                        <button
-                          className="flex-1 text-xs px-2 py-1 rounded-md bg-black text-white hover:bg-gray-900"
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(
-                                `${API_BASE}/api/contact-messages/${msg.id}/accept`,
-                                { method: 'POST' }
-                              );
-                              if (!res.ok) {
-                                const text = await res.text();
-                                throw new Error(text || 'Failed to accept message.');
+                  websiteBellNotifications.slice(0, 8).map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="flex items-start gap-2 px-2 py-2 border-b last:border-b-0 border-gray-100"
+                    >
+                      <button
+                        type="button"
+                        className="flex-1 min-w-0 text-left rounded-md hover:bg-gray-50 px-1 py-0.5 -mx-1"
+                        onClick={() => {
+                          if (msg.status === 'accepted') onNavigate('leads');
+                        }}
+                      >
+                        <p className="text-sm font-medium text-black">
+                          {msg.status === 'accepted'
+                            ? 'New website lead'
+                            : "Couldn't auto-add — tap Add to leads"}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {msg.name} · {msg.email}
+                        </p>
+                      </button>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {msg.status === 'pending' && (
+                          <button
+                            type="button"
+                            className="text-[10px] px-2 py-1 rounded-md bg-black text-white hover:bg-gray-900"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(
+                                  `${API_BASE}/api/contact-messages/${msg.id}/accept`,
+                                  { method: 'POST' }
+                                );
+                                if (!res.ok) return;
+                                const data = (await res.json()) as { leadId?: number };
+                                setContactMessages((prev) =>
+                                  prev.map((m) =>
+                                    m.id === msg.id
+                                      ? { ...m, status: 'accepted', leadId: data.leadId ?? m.leadId }
+                                      : m
+                                  )
+                                );
+                                fetchNavCounts();
+                                toast.success(`Lead created: ${msg.name}`);
+                              } catch {
+                                // ignore
                               }
-                              setContactMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === msg.id ? { ...m, status: 'accepted' } : m
-                                )
-                              );
-                              fetchNavCounts();
-                            } catch {
-                              // keep UI as-is on error
-                            }
-                          }}
-                        >
-                          Accept → Lead
-                        </button>
+                            }}
+                          >
+                            Add to leads
+                          </button>
+                        )}
                         <button
-                          className="flex-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(
-                                `${API_BASE}/api/contact-messages/${msg.id}/dismiss`,
-                                { method: 'POST' }
-                              );
-                              if (!res.ok) {
-                                const text = await res.text();
-                                throw new Error(text || 'Failed to dismiss message.');
-                              }
-                              setContactMessages((prev) =>
-                                prev.map((m) =>
-                                  m.id === msg.id ? { ...m, status: 'dismissed' } : m
-                                )
-                              );
-                            } catch {
-                              // keep UI as-is on error
-                            }
-                          }}
+                          type="button"
+                          className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                          aria-label="Dismiss notification"
+                          onClick={() => dismissBellNotification(msg.id)}
                         >
-                          Dismiss
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
                     </div>

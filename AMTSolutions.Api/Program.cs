@@ -631,7 +631,7 @@ app.MapGet("/api/contact-messages", () =>
         .ToList());
 });
 
-app.MapPost("/api/contact-messages", (CreateContactMessageRequest request) =>
+app.MapPost("/api/contact-messages", async (CreateContactMessageRequest request, ILeadService leadService, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(request.Name) ||
         string.IsNullOrWhiteSpace(request.Email) ||
@@ -640,15 +640,43 @@ app.MapPost("/api/contact-messages", (CreateContactMessageRequest request) =>
         return Results.BadRequest(new { error = "Name, email, and message are required." });
     }
 
+    var name = request.Name.Trim();
+    var email = request.Email.Trim();
+    var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+    var company = string.IsNullOrWhiteSpace(request.Company) ? null : request.Company.Trim();
+    var message = request.Message.Trim();
+
+    int? leadId = null;
+    var status = "pending";
+    try
+    {
+        var createLead = new CreateLeadRequest(
+            Name: name,
+            Email: email,
+            Phone: phone,
+            Company: company,
+            Source: "Website Contact Form",
+            Notes: message
+        );
+        var created = await leadService.CreateAsync(createLead, ct);
+        leadId = created.Id;
+        status = "accepted";
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[contact-messages] Auto-create lead failed (message stored as pending): {ex.Message}");
+    }
+
     var msg = new ContactMessageDto(
         Id: Guid.NewGuid().ToString(),
-        Name: request.Name.Trim(),
-        Email: request.Email.Trim(),
-        Phone: string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
-        Company: string.IsNullOrWhiteSpace(request.Company) ? null : request.Company.Trim(),
-        Message: request.Message.Trim(),
-        Status: "pending",
-        CreatedAtUtc: DateTime.UtcNow
+        Name: name,
+        Email: email,
+        Phone: phone,
+        Company: company,
+        Message: message,
+        Status: status,
+        CreatedAtUtc: DateTime.UtcNow,
+        LeadId: leadId
     );
 
     contactMessagesStore.Add(msg);
@@ -664,6 +692,11 @@ app.MapPost("/api/contact-messages/{id}/accept", async (string id, ILeadService 
     }
 
     var msg = contactMessagesStore[existingIndex];
+    if (string.Equals(msg.Status, "accepted", StringComparison.OrdinalIgnoreCase) && msg.LeadId is int existingLeadId)
+    {
+        return Results.Ok(new { leadId = existingLeadId, alreadyAccepted = true });
+    }
+
     if (!string.Equals(msg.Status, "pending", StringComparison.OrdinalIgnoreCase))
     {
         return Results.BadRequest(new { error = "Only pending messages can be accepted." });
@@ -680,7 +713,7 @@ app.MapPost("/api/contact-messages/{id}/accept", async (string id, ILeadService 
 
     var created = await leadService.CreateAsync(createLead, ct);
 
-    contactMessagesStore[existingIndex] = msg with { Status = "accepted" };
+    contactMessagesStore[existingIndex] = msg with { Status = "accepted", LeadId = created.Id };
 
     return Results.Ok(new { leadId = created.Id });
 });
@@ -1985,7 +2018,8 @@ public sealed record ContactMessageDto(
     string? Company,
     string Message,
     string Status,
-    DateTime CreatedAtUtc
+    DateTime CreatedAtUtc,
+    int? LeadId = null
 );
 
 public sealed record CreateContactMessageRequest(
