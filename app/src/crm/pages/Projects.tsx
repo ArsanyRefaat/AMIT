@@ -310,6 +310,7 @@ export function Projects() {
 
   const portfolioFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPortfolioImage, setUploadingPortfolioImage] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -442,9 +443,18 @@ export function Projects() {
   };
 
   const handleCreateAsync = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Please enter a project name.');
+      return;
+    }
+    if (!formData.customer) {
+      toast.error('Please select a customer.');
+      return;
+    }
+
     const payload = {
-      customerId: Number(formData.customer || '0'),
-      name: formData.name,
+      customerId: Number(formData.customer),
+      name: formData.name.trim(),
       description: formData.description || undefined,
       budget: Number(formData.budget || '0'),
       startDateUtc: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
@@ -456,13 +466,26 @@ export function Projects() {
       publicPortfolioSolution: formData.publicPortfolioSolution.trim() || undefined,
     };
 
+    setIsCreating(true);
+    try {
     const res = await fetch(`${API_BASE}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) return;
+    if (!res.ok) {
+      const errText = await res.text();
+      let msg = errText || 'Failed to create project';
+      try {
+        const j = JSON.parse(errText);
+        if (j?.error) msg = j.error;
+      } catch {
+        /* use errText */
+      }
+      toast.error(msg);
+      return;
+    }
     const created: {
       id: number;
       customerId: number;
@@ -511,6 +534,12 @@ export function Projects() {
     setProjects([...projects, newProject]);
     setIsCreateDialogOpen(false);
     resetForm();
+    toast.success('Project created.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create project');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleEdit = async () => {
@@ -846,7 +875,9 @@ export function Projects() {
           <ProjectForm formData={formData} setFormData={setFormData} customers={customers} showDeviceUpload={false} />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-            <Button onClick={handleCreateAsync} className="bg-black hover:bg-gray-800 text-white">Create Project</Button>
+            <Button onClick={() => void handleCreateAsync()} disabled={isCreating} className="bg-black hover:bg-gray-800 text-white">
+              {isCreating ? 'Creating…' : 'Create Project'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

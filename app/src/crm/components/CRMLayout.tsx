@@ -121,25 +121,23 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
       const authHeaders: Record<string, string> = {};
       if (token) authHeaders.Authorization = `Bearer ${token}`;
 
-      const [leadRes, taskRes, contactRes, bellRes] = await Promise.all([
-        fetch(`${API_BASE}/api/leads`),
-        fetch(`${API_BASE}/api/tasks`),
+      const [leadCountRes, taskCountRes, contactRes, bellRes] = await Promise.all([
+        fetch(`${API_BASE}/api/leads/count`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/tasks/count`, { cache: 'no-store' }),
         fetch(`${API_BASE}/api/contact-messages`),
         fetch(`${API_BASE}/api/crm-bell-notifications`, { headers: authHeaders, cache: 'no-store' }),
       ]);
-      const toJson = (r: Response) => (r.ok ? r.json() : Promise.resolve([]));
-      const [leadData, taskData, contactData, bellData] = await Promise.all([
-        toJson(leadRes),
-        toJson(taskRes),
+      const toJson = (r: Response) => (r.ok ? r.json() : Promise.resolve(null));
+      const [leadCountData, taskCountData, contactData, bellData] = await Promise.all([
+        toJson(leadCountRes),
+        toJson(taskCountRes),
         toJson(contactRes),
         bellRes.ok ? bellRes.json() : Promise.resolve([]),
       ]);
-      const leads = Array.isArray(leadData) ? leadData : leadData?.value ?? [];
-      const tasks = Array.isArray(taskData) ? taskData : taskData?.value ?? [];
       const contacts = Array.isArray(contactData) ? contactData : contactData?.value ?? [];
       const bellArr = Array.isArray(bellData) ? bellData : bellData?.value ?? [];
-      setLeadsCount(leads.length);
-      setTasksCount(tasks.length);
+      setLeadsCount(typeof leadCountData?.count === 'number' ? leadCountData.count : 0);
+      setTasksCount(typeof taskCountData?.count === 'number' ? taskCountData.count : 0);
       setContactMessages(
         contacts.map((c: any) => ({
           id: c.id,
@@ -172,7 +170,7 @@ export function CRMLayout({ children, currentPage, onNavigate, onBackToEntry, on
   }, [fetchNavCounts]);
 
   useEffect(() => {
-    const interval = setInterval(fetchNavCounts, 60 * 1000);
+    const interval = setInterval(fetchNavCounts, 120 * 1000);
     return () => clearInterval(interval);
   }, [fetchNavCounts]);
 

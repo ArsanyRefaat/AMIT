@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { API_BASE } from '@/lib/api';
 import type { Permission, Role } from '@/types';
+import { toast } from 'sonner';
 
 export function RolesPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,7 +37,8 @@ export function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [isSaving, setIsSaving] = useState(false);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -104,6 +106,7 @@ export function RolesPage() {
 
   const handleCreate = async () => {
     if (!formData.name.trim()) {
+      toast.error('Please enter a role name.');
       return;
     }
 
@@ -113,21 +116,37 @@ export function RolesPage() {
       permissions: formData.selectedPermissions,
     };
 
-    const res = await fetch(`${API_BASE}/api/roles`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      // In a full app we would show a toast here
-      return;
+      if (!res.ok) {
+        const errText = await res.text();
+        let msg = errText || 'Failed to create role';
+        try {
+          const j = JSON.parse(errText);
+          if (j?.error) msg = j.error;
+        } catch {
+          /* use errText */
+        }
+        toast.error(msg);
+        return;
+      }
+
+      const created: Role = await res.json();
+      setRoles(prev => [...prev, created]);
+      setIsCreateDialogOpen(false);
+      setFormData({ name: '', description: '', selectedPermissions: [] });
+      toast.success('Role created.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create role');
+    } finally {
+      setIsSaving(false);
     }
-
-    const created: Role = await res.json();
-    setRoles(prev => [...prev, created]);
-    setIsCreateDialogOpen(false);
-    setFormData({ name: '', description: '', selectedPermissions: [] });
   };
 
   const handleEdit = async () => {
@@ -302,7 +321,7 @@ export function RolesPage() {
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button onClick={handleCreate} className="bg-black hover:bg-gray-800 text-white">
+              <Button onClick={() => void handleCreate()} disabled={isSaving} className="bg-black hover:bg-gray-800 text-white">
                 Create Role
               </Button>
             </DialogFooter>

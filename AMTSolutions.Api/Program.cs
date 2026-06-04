@@ -630,6 +630,9 @@ app.MapGet("/api/leads", async (ILeadService service, CancellationToken ct) =>
     return Results.Ok(leads);
 });
 
+app.MapGet("/api/leads/count", async (AmtsDbContext db, CancellationToken ct) =>
+    Results.Ok(new { count = await db.Leads.CountAsync(ct) }));
+
 app.MapGet("/api/leads/{id:int}", async (int id, ILeadService service, CancellationToken ct) =>
 {
     var lead = await service.GetByIdAsync(id, ct);
@@ -868,6 +871,9 @@ app.MapGet("/api/tasks", async (ITaskService service, CancellationToken ct) =>
     var tasks = await service.GetAllAsync(ct);
     return Results.Ok(tasks);
 });
+
+app.MapGet("/api/tasks/count", async (AmtsDbContext db, CancellationToken ct) =>
+    Results.Ok(new { count = await db.Tasks.CountAsync(ct) }));
 
 app.MapGet("/api/tasks/{id:int}", async (int id, ITaskService service, CancellationToken ct) =>
 {

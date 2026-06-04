@@ -282,6 +282,7 @@ export function Leads() {
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [activeTab, setActiveTab] = useState('details');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState<LeadFormData>({
@@ -373,9 +374,16 @@ export function Leads() {
   };
 
   const handleCreate = async () => {
+    const name = `${formData.firstName} ${formData.lastName}`.trim();
+    const email = formData.email.trim();
+    if (!name || !email) {
+      toast.error('Name and email are required.');
+      return;
+    }
+
     const payload = {
-      name: `${formData.firstName} ${formData.lastName}`.trim(),
-      email: formData.email,
+      name,
+      email,
       phone: formData.phone || undefined,
       company: formData.company || undefined,
       source: formData.source || undefined,
@@ -383,6 +391,7 @@ export function Leads() {
       assignedStaffUserId: formData.assignedTo || undefined,
     };
 
+    setIsSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/leads`, {
         method: 'POST',
@@ -391,6 +400,15 @@ export function Leads() {
       });
 
       if (!res.ok) {
+        const errText = await res.text();
+        let msg = errText || 'Failed to add lead';
+        try {
+          const j = JSON.parse(errText);
+          if (j?.error) msg = j.error;
+        } catch {
+          /* use errText */
+        }
+        toast.error(msg);
         return;
       }
 
@@ -422,8 +440,11 @@ export function Leads() {
       setLeads([...leads, newLead]);
       setIsCreateDialogOpen(false);
       resetForm();
-    } catch {
-      // ignore for now
+      toast.success('Lead added.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to add lead');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -765,7 +786,9 @@ export function Leads() {
           <LeadForm formData={formData} setFormData={setFormData} staffUsers={staffUsers} />
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-            <Button onClick={handleCreate} className="bg-black hover:bg-gray-800 text-white">Add Lead</Button>
+            <Button onClick={() => void handleCreate()} disabled={isSaving} className="bg-black hover:bg-gray-800 text-white">
+              {isSaving ? 'Saving…' : 'Add Lead'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

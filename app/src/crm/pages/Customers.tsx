@@ -14,6 +14,19 @@ import { motion } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { API_BASE } from '@/lib/api';
+import { apiJson } from '@/lib/crmApi';
+import { toast } from 'sonner';
+
+function formatAddress(address: unknown): string | null {
+  if (!address) return null;
+  if (typeof address === 'string') return address.trim() || null;
+  if (typeof address === 'object' && address !== null) {
+    const a = address as { city?: string; country?: string; street?: string };
+    const parts = [a.street, a.city, a.country].filter(Boolean);
+    return parts.length ? parts.join(', ') : null;
+  }
+  return null;
+}
 
 interface CustomersProps {
   onNavigateToCreateInvoice?: (customerId: string) => void;
@@ -33,6 +46,138 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
     company: '',
     address: '',
   });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const resetForm = () => {
+    setFormData({ name: '', email: '', phone: '', company: '', address: '' });
+  };
+
+  const handleCreate = async () => {
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    if (!name || !email) {
+      toast.error('Name and email are required.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const result = await apiJson<{
+        id: number;
+        name: string;
+        email: string;
+        phone?: string;
+        company?: string;
+        address?: string;
+      }>('/api/customers', {
+        method: 'POST',
+        body: {
+          name,
+          email,
+          phone: formData.phone.trim() || undefined,
+          company: formData.company.trim() || undefined,
+          address: formData.address.trim() || undefined,
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      const created = result.data;
+      setCustomers((prev) => [
+        ...prev,
+        {
+          id: String(created.id),
+          name: created.name,
+          email: created.email,
+          phone: created.phone,
+          company: created.company,
+          address: created.address,
+          industry: created.company ?? '',
+          totalRevenue: 0,
+          projects: [],
+          invoices: [],
+        },
+      ]);
+      setIsCreateDialogOpen(false);
+      resetForm();
+      toast.success('Customer added.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedCustomer) return;
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    if (!name || !email) {
+      toast.error('Name and email are required.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const result = await apiJson<{
+        id: number;
+        name: string;
+        email: string;
+        phone?: string;
+        company?: string;
+        address?: string;
+      }>(`/api/customers/${selectedCustomer.id}`, {
+        method: 'PUT',
+        body: {
+          name,
+          email,
+          phone: formData.phone.trim() || undefined,
+          company: formData.company.trim() || undefined,
+          address: formData.address.trim() || undefined,
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      const updated = result.data;
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === selectedCustomer.id
+            ? {
+                ...c,
+                name: updated.name,
+                email: updated.email,
+                phone: updated.phone,
+                company: updated.company,
+                address: updated.address,
+                industry: updated.company ?? '',
+              }
+            : c,
+        ),
+      );
+      setIsEditDialogOpen(false);
+      setSelectedCustomer(null);
+      toast.success('Customer updated.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedCustomer) return;
+    setIsSaving(true);
+    try {
+      const result = await apiJson<unknown>(`/api/customers/${selectedCustomer.id}`, { method: 'DELETE' });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      setCustomers((prev) => prev.filter((c) => c.id !== selectedCustomer.id));
+      setIsDeleteDialogOpen(false);
+      setSelectedCustomer(null);
+      toast.success('Customer deleted.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -224,10 +369,10 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
                     {customer.phone}
                   </a>
                 )}
-                {customer.address && (
+                {formatAddress(customer.address) && (
                   <div className="flex items-center gap-2 text-sm text-[var(--amd-gray-600)]">
                     <MapPin className="w-4 h-4" />
-                    {customer.address.city}, {customer.address.country}
+                    {formatAddress(customer.address)}
                   </div>
                 )}
               </div>
@@ -257,11 +402,18 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
           <DialogHeader>
             <DialogTitle>Add New Customer</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <form
+            className="space-y-4 py-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCreate();
+            }}
+          >
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
               <Input
                 id="name"
+                required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
@@ -271,6 +423,7 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
               <Input
                 id="email"
                 type="email"
+                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
@@ -301,53 +454,21 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button
-              className="bg-[var(--amd-black)] text-white hover:bg-[var(--amd-charcoal)]"
-              onClick={async () => {
-                const payload = {
-                  name: formData.name,
-                  email: formData.email,
-                  phone: formData.phone || undefined,
-                  company: formData.company || undefined,
-                  address: formData.address || undefined,
-                };
-
-                const res = await fetch(`${API_BASE}/api/customers`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                });
-
-                if (!res.ok) return;
-                const created: { id: number; name: string; email: string; phone?: string; company?: string; address?: string } =
-                  await res.json();
-
-                const newCustomer = {
-                  id: String(created.id),
-                  name: created.name,
-                  email: created.email,
-                  phone: created.phone,
-                  company: created.company,
-                  address: created.address,
-                  industry: created.company ?? '',
-                  totalRevenue: 0,
-                  projects: [],
-                  invoices: [],
-                };
-
-                setCustomers((prev) => [...prev, newCustomer]);
-                setIsCreateDialogOpen(false);
-                setFormData({ name: '', email: '', phone: '', company: '', address: '' });
-              }}
-            >
-              Save
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isSaving}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="bg-[var(--amd-black)] text-white hover:bg-[var(--amd-charcoal)]"
+              >
+                {isSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -357,11 +478,18 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
           <DialogHeader>
             <DialogTitle>Edit Customer</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <form
+            className="space-y-4 py-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleUpdate();
+            }}
+          >
             <div className="space-y-2">
               <Label htmlFor="edit-name">Name *</Label>
               <Input
                 id="edit-name"
+                required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
@@ -371,6 +499,7 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
               <Input
                 id="edit-email"
                 type="email"
+                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
@@ -401,54 +530,21 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button
-              className="bg-[var(--amd-black)] text-white hover:bg-[var(--amd-charcoal)]"
-              onClick={async () => {
-                if (!selectedCustomer) return;
-                const payload = {
-                  name: formData.name,
-                  email: formData.email,
-                  phone: formData.phone || undefined,
-                  company: formData.company || undefined,
-                  address: formData.address || undefined,
-                };
-
-                const res = await fetch(`${API_BASE}/api/customers/${selectedCustomer.id}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                });
-
-                if (!res.ok) return;
-                const updated = await res.json();
-
-                setCustomers((prev) =>
-                  prev.map((c) =>
-                    c.id === selectedCustomer.id
-                      ? {
-                          ...c,
-                          name: updated.name,
-                          email: updated.email,
-                          phone: updated.phone,
-                          company: updated.company,
-                          address: updated.address,
-                          industry: updated.company ?? '',
-                        }
-                      : c,
-                  ),
-                );
-                setIsEditDialogOpen(false);
-                setSelectedCustomer(null);
-              }}
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isSaving}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="bg-[var(--amd-black)] text-white hover:bg-[var(--amd-charcoal)]"
+              >
+                {isSaving ? 'Saving…' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -470,19 +566,10 @@ export function Customers({ onNavigateToCreateInvoice }: CustomersProps) {
             </DialogClose>
             <Button
               variant="destructive"
-              onClick={async () => {
-                if (!selectedCustomer) return;
-                const res = await fetch(`${API_BASE}/api/customers/${selectedCustomer.id}`, {
-                  method: 'DELETE',
-                });
-                if (!res.ok && res.status !== 204) return;
-
-                setCustomers((prev) => prev.filter((c) => c.id !== selectedCustomer.id));
-                setIsDeleteDialogOpen(false);
-                setSelectedCustomer(null);
-              }}
+              disabled={isSaving}
+              onClick={() => void handleDelete()}
             >
-              Delete
+              {isSaving ? 'Deleting…' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
