@@ -4,6 +4,9 @@ import { ArrowRight, ExternalLink } from 'lucide-react';
 import { portfolioItems } from '@/data/mockData';
 import type { PortfolioItem } from '@/types';
 import { API_BASE, resolvePortfolioImageUrl } from '@/lib/api';
+import { readPublicCache, writePublicCache } from '@/lib/publicCache';
+
+const PORTFOLIO_CACHE_KEY = 'portfolio';
 
 type Page = 'home' | 'about' | 'services' | 'portfolio' | 'contact' | 'case-study';
 
@@ -49,9 +52,17 @@ type PortfolioLoadState =
   | { status: 'crm'; items: PortfolioItem[] }
   | { status: 'fallback' };
 
+function initialPortfolioState(): PortfolioLoadState {
+  const cached = readPublicCache<PortfolioItem[]>(PORTFOLIO_CACHE_KEY);
+  if (cached && cached.length > 0) {
+    return { status: 'crm', items: cached };
+  }
+  return { status: 'loading' };
+}
+
 export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
   const [activeFilter, setActiveFilter] = useState('All');
-  const [loadState, setLoadState] = useState<PortfolioLoadState>({ status: 'loading' });
+  const [loadState, setLoadState] = useState<PortfolioLoadState>(initialPortfolioState);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,18 +73,25 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
       })
       .then((data: PublicPortfolioApi[]) => {
         if (cancelled) return;
-        if (!Array.isArray(data)) {
-          setLoadState({ status: 'crm', items: [] });
+        if (!Array.isArray(data) || data.length === 0) {
+          const cached = readPublicCache<PortfolioItem[]>(PORTFOLIO_CACHE_KEY);
+          if (cached && cached.length > 0) {
+            setLoadState({ status: 'crm', items: cached });
+          } else {
+            setLoadState({ status: 'crm', items: [] });
+          }
           return;
         }
-        if (data.length === 0) {
-          setLoadState({ status: 'crm', items: [] });
-          return;
-        }
-        setLoadState({ status: 'crm', items: data.map(mapApiToPortfolioItem) });
+        const items = data.map(mapApiToPortfolioItem);
+        writePublicCache(PORTFOLIO_CACHE_KEY, items);
+        setLoadState({ status: 'crm', items });
       })
       .catch(() => {
-        if (!cancelled) {
+        if (cancelled) return;
+        const cached = readPublicCache<PortfolioItem[]>(PORTFOLIO_CACHE_KEY);
+        if (cached && cached.length > 0) {
+          setLoadState({ status: 'crm', items: cached });
+        } else {
           setLoadState({ status: 'fallback' });
         }
       });

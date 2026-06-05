@@ -623,6 +623,8 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow }));
+
 // Leads
 app.MapGet("/api/leads", async (ILeadService service, CancellationToken ct) =>
 {

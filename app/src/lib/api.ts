@@ -23,6 +23,14 @@ export function resolvePortfolioImageUrl(url: string | null | undefined): string
 	return resolved;
 }
 
+/** Ping the API as early as possible to reduce Render free-tier cold-start delay. */
+export function warmApi(): void {
+  if (typeof window === 'undefined') return;
+  const opts: RequestInit = { cache: 'no-store' };
+  void fetch(`${API_BASE}/api/health`, opts).catch(() => {});
+  void fetch(`${API_BASE}/api/public/portfolio`, opts).catch(() => {});
+}
+
 /** Headers for authenticated CRM requests (e.g. file upload). */
 export function authHeaders(): Record<string, string> {
 	const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
