@@ -2263,3 +2263,5 @@ public sealed record DisableTwoFactorRequest(string Email);
 public sealed record CompleteLoginRequest(string Email, string Code);
 
 public sealed record LoginTwoFactorRequiredResponse(bool RequiresTwoFactor, string Email);
+/ /   U p d a t e d   2 0 2 6 - 0 6 - 0 7  
+ 

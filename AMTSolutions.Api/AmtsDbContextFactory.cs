@@ -18,3 +18,4 @@ public sealed class AmtsDbContextFactory : IDesignTimeDbContextFactory<AmtsDbCon
         return new AmtsDbContext(optionsBuilder.Options);
     }
 }
+
