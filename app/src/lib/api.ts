@@ -27,8 +27,18 @@ export function resolvePortfolioImageUrl(url: string | null | undefined): string
 export function warmApi(): void {
   if (typeof window === 'undefined') return;
   const opts: RequestInit = { cache: 'no-store' };
+  
+  // Initial ping
   void fetch(`${API_BASE}/api/health`, opts).catch(() => {});
+  
+  // Fetch portfolio data immediately
   void fetch(`${API_BASE}/api/public/portfolio`, opts).catch(() => {});
+  
+  // Retry after 2 seconds to ensure server is fully awake
+  setTimeout(() => {
+    void fetch(`${API_BASE}/api/health`, opts).catch(() => {});
+    void fetch(`${API_BASE}/api/public/portfolio`, opts).catch(() => {});
+  }, 2000);
 }
 
 /** Headers for authenticated CRM requests (e.g. file upload). */
