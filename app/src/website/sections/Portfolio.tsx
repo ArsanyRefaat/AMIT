@@ -57,7 +57,8 @@ function initialPortfolioState(): PortfolioLoadState {
   if (cached && cached.length > 0) {
     return { status: 'crm', items: cached };
   }
-  return { status: 'loading' };
+  // Show fallback data immediately instead of loading
+  return { status: 'fallback' };
 }
 
 export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
@@ -66,6 +67,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
 
   useEffect(() => {
     let cancelled = false;
+    // Fetch in background without blocking UI
     fetch(`${API_BASE}/api/public/portfolio`, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error('Portfolio request failed');
@@ -74,12 +76,7 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
       .then((data: PublicPortfolioApi[]) => {
         if (cancelled) return;
         if (!Array.isArray(data) || data.length === 0) {
-          const cached = readPublicCache<PortfolioItem[]>(PORTFOLIO_CACHE_KEY);
-          if (cached && cached.length > 0) {
-            setLoadState({ status: 'crm', items: cached });
-          } else {
-            setLoadState({ status: 'crm', items: [] });
-          }
+          // Keep current state if API returns empty
           return;
         }
         const items = data.map(mapApiToPortfolioItem);
@@ -87,13 +84,8 @@ export function Portfolio({ onNavigate, fullPage = false }: PortfolioProps) {
         setLoadState({ status: 'crm', items });
       })
       .catch(() => {
+        // Silently fail and keep showing cached/fallback data
         if (cancelled) return;
-        const cached = readPublicCache<PortfolioItem[]>(PORTFOLIO_CACHE_KEY);
-        if (cached && cached.length > 0) {
-          setLoadState({ status: 'crm', items: cached });
-        } else {
-          setLoadState({ status: 'fallback' });
-        }
       });
     return () => {
       cancelled = true;
